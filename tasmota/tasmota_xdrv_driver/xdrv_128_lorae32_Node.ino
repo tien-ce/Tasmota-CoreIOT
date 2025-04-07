@@ -123,20 +123,54 @@ void CmdSendLoraTelemetry(void)
         ResponseCmndDone();
         return;
     }
-    StaticJsonDocument<58> doc;
-    JsonArray arr = doc.createNestedArray(String(device_info.device_name));  // Tạo mảng cho "Device A"
-    JsonObject data = arr.createNestedObject();         // Tạo đối tượng trong mảng
-    StaticJsonDocument<58> mailboxDoc;
-    DeserializationError error = deserializeJson(mailboxDoc, XdrvMailbox.data);
-    for (JsonPair p : mailboxDoc.as<JsonObject>())
+
+    // Parse JSON payload từ Berry
+    StaticJsonDocument<256> doc;
+    DeserializationError error = deserializeJson(doc, XdrvMailbox.data);
+    if (error)
     {
-        data[p.key()] = p.value();  // Gán tất cả các key-value vào data
+        AddLog(LOG_LEVEL_ERROR, PSTR("Failed to parse telemetry JSON"));
+        ResponseCmndDone();
+        return;
     }
-    String json_string;
-    serializeJson(doc,json_string);
-    AddLog(LOG_LEVEL_INFO, PSTR("Lora Transmit : %s"), json_string.c_str());
-    ResponseStatus rs = my_lora_e32.sendMessage(json_string);
-    AddLog(LOG_LEVEL_INFO, rs.getResponseDescription().c_str());
+
+    // Chuẩn bị struct telemetry
+    Lora lora_data = Lora_init_zero;
+    lora_data.has_telemetry = true;
+
+    JsonObject obj = doc.as<JsonObject>();
+
+    // Gán dữ liệu V1..V10 nếu có
+    if (obj.containsKey("V1") && !obj["V1"].isNull()) lora_data.telemetry.temperature = obj["V1"];
+    if (obj.containsKey("V2") && !obj["V2"].isNull()) lora_data.telemetry.humidity = obj["V2"];
+    if (obj.containsKey("V3") && !obj["V3"].isNull()) lora_data.telemetry.soil_moisture = obj["V3"];
+    if (obj.containsKey("V4") && !obj["V4"].isNull()) lora_data.telemetry.soil_temperature = obj["V4"];
+    if (obj.containsKey("V5") && !obj["V5"].isNull()) lora_data.telemetry.ph_level = obj["V5"];
+    if (obj.containsKey("V6") && !obj["V6"].isNull()) lora_data.telemetry.ec_level = obj["V6"];
+    if (obj.containsKey("V7") && !obj["V7"].isNull()) lora_data.telemetry.light_intensity = obj["V7"];
+    if (obj.containsKey("V8") && !obj["V8"].isNull()) lora_data.telemetry.co2_level = obj["V8"];
+    if (obj.containsKey("V9") && !obj["V9"].isNull()) lora_data.telemetry.rainfall_level = obj["V9"];
+    if (obj.containsKey("V10") && !obj["V10"].isNull()) lora_data.telemetry.leaf_wetness = obj["V10"];
+    
+
+    // Encode bằng Nanopb
+    uint8_t buffer[256];  // Giá trị tối đa Lora E32 có thể gửi
+    pb_ostream_t stream = pb_ostream_from_buffer(buffer, sizeof(buffer));
+    bool status = pb_encode(&stream, Lora_fields, &lora_data);
+    if (!status)
+    {
+        AddLog(LOG_LEVEL_ERROR, PSTR("Failed to encode telemetry data"));
+        ResponseCmndDone();
+        return;
+    }
+
+    // Gửi qua LoRa
+    ResponseStatus rs = my_lora_e32.sendMessage(buffer, stream.bytes_written);
+    AddLog(LOG_LEVEL_INFO, PSTR("LoRa Send: %s"), rs.getResponseDescription().c_str());
+
+    // Debug log JSON gốc nếu cần
+    AddLog(LOG_LEVEL_INFO, PSTR("Lora JSON: %s"), XdrvMailbox.data);
+
     ResponseCmndDone();
 }
 

@@ -13,14 +13,14 @@
 typedef struct _Lora_telemetry {
     float temperature; /* V1: Nhiệt độ không khí (°C) */
     float humidity; /* V2: Độ ẩm không khí (% RH) */
-    float soil_moisture; /* V3: Độ ẩm đất (% hoặc raw) */
+    float soil_moisture; /* V3: Độ ẩm đất (%) */
     float soil_temperature; /* V4: Nhiệt độ đất (°C) */
     float ph_level; /* V5: Độ pH đất hoặc nước */
     float ec_level; /* V6: Độ dẫn điện EC (µS/cm) */
-    float light_intensity; /* V7: Cường độ ánh sáng (lux hoặc raw) */
+    float light_intensity; /* V7: Cường độ ánh sáng (lux) */
     float co2_level; /* V8: Nồng độ CO2 (ppm) */
     float rainfall_level; /* V9: Lượng mưa (mm) */
-    float leaf_wetness; /* V10: Độ ẩm lá cây (% hoặc binary) */
+    float leaf_wetness; /* V10: Độ ẩm lá cây (% ) */
 } Lora_telemetry;
 
 typedef struct _Lora_info {
