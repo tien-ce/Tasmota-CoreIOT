@@ -6,6 +6,16 @@
 #include "LoRa_E32.h"
 #include "ArduinoJson.h"
 #include "HardwareSerial.h"
+#include "employess.pb.h"
+#include "pb_encode.h"
+#include "pb_decode.h"
+#include "pb_common.h"
+/***************************ENCODE - DECODE********************************** */
+bool encode_string(pb_ostream_t *stream ,const pb_field_t *field,void * const *arg);
+bool decode_string(pb_istream_t *stream, const pb_field_t *field, void **arg);
+bool encode_byte(pb_ostream_t *stream, const pb_field_t *field, void * const *arg);
+bool decode_byte(pb_istream_t *stream, const pb_field_t *field, void **arg);
+/**************************************************************************** */
 class Device_info{
     public:
     String device_name;

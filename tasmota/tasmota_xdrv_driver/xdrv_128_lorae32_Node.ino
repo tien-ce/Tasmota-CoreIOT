@@ -2,7 +2,7 @@
   xdrv_128_1_lorae32.ino - LoRa E32 module integration for Tasmota
   Based on Lora E32 UART module communication
 */
-#define USE_LORA_E32
+#include "my_user_config.h"
 #ifdef USE_LORA_E32
 
 /*********************************************************************************************\
@@ -224,11 +224,6 @@ void CmdPrintLora(void){
 /************************************************************************************************************ */
 // Biến toàn cục
 bool initSuccess = false;
-String receivedMessage;
-/*-----------------------------Biến cục bộ-------------------------*/
-char mess[100];
-
-/*-----------------------------------------------------------------*/
 
 void LoraE32Init()
 {
@@ -238,6 +233,31 @@ void LoraE32Init()
   configMyLoraE32(20, 0x01, 0x02, 3);
   ResponseStructContainer c = my_lora_e32.getConfiguration();
   pinMode(LED_Pin,OUTPUT); // Pin for RPC
+  uint8_t buffer_encode[256];
+  pb_ostream_t stream = pb_ostream_from_buffer(buffer_encode,sizeof(buffer_encode));
+  const char* device_name = "Device B";
+  const uint8_t addr_hi[] = {0x12};
+  const uint8_t addr_lo[] = {0x22};
+  Lora lora = Lora_init_zero;
+  lora.has_info = true;
+
+  lora.info.deviceName.arg = (void*) device_name;
+  lora.info.deviceName.funcs.encode = &encode_string;
+  
+  lora.info.addrHigh.arg = (void*) addr_hi;
+  lora.info.addrHigh.funcs.encode = &encode_byte;
+
+  lora.info.addrLow.arg = (void*) addr_lo;
+  lora.info.addrLow.funcs.encode = &encode_byte;
+
+  if(pb_encode(&stream,Lora_fields,&lora)){
+    AddLog(LOG_LEVEL_INFO,PSTR("Encode Success"));
+    uint16_t len = stream.bytes_written;
+    char buf[64];
+    snprintf(buf, sizeof(buf), "Value: %d", len);
+    AddLog(LOG_LEVEL_INFO, buf);
+    my_lora_e32.sendMessage(buffer_encode,len);
+  }
   if (c.data == NULL)
   {
     AddLog(LOG_LEVEL_INFO, PSTR("Config NULL"));

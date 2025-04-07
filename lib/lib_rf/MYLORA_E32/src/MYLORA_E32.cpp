@@ -1,4 +1,32 @@
 #include "MYLORA_E32.h"
+/*-----------------------ENCODE-DECODE-----------------------------------------------------*/
+bool decode_string(pb_istream_t *stream, const pb_field_t *field, void **arg) {
+    char *out = (char*)(*arg);
+    // Chỉ đọc đúng số byte của chuỗi thực sự
+    size_t len = stream->bytes_left;
+    if (!pb_read(stream, (pb_byte_t*)out, len)) return false;
+    out[len] = '\0'; // Đảm bảo null-terminated để dùng với Serial.println
+    return true;
+}
+  
+bool decode_byte(pb_istream_t *stream, const pb_field_t *field, void **arg) {
+uint8_t *out = (uint8_t*)(*arg);
+return pb_read(stream, out, stream->bytes_left);
+}
+  
+bool encode_string(pb_ostream_t *stream, const pb_field_t *field, void * const *arg)
+{
+    const char *str = (const char *)(*arg);
+    return pb_encode_tag_for_field(stream, field) &&
+            pb_encode_string(stream, (uint8_t*)str, strlen(str));
+}
+bool encode_byte(pb_ostream_t *stream, const pb_field_t *field, void * const *arg) {
+const uint8_t *data = (const uint8_t *)(*arg);
+size_t len = 1; // 1 byte cho addrHigh
+return pb_encode_tag_for_field(stream, field) &&
+        pb_encode_string(stream, data, len);
+}
+/*-----------------------------------------------------------------------------------------*/
 HardwareSerial LoraSerial(1);
 LoRa_E32 my_lora_e32(MY_LORA_TX, MY_LORA_RX, &LoraSerial, UART_BPS_RATE_9600, SERIAL_8N1);
 Device_info device_info("Device A",106.76940000,10.90682000);
