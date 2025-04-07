@@ -1023,6 +1023,9 @@
 #define D_SENSOR_WOOLIIS_RX    "Wooliis Rx"
 #define D_SENSOR_C8_CO2_5K_RX  "C8-CO2-5K Rx"
 #define D_SENSOR_C8_CO2_5K_TX  "C8-CO2-5K Tx"
+#define D_GPIO_LORA_E32_TX     "LoRa E32 Tx"
+#define D_GPIO_LORA_E32_RX     "LoRa E32 Rx"
+
 
 // Units
 #define D_UNIT_AMPERE "A"
