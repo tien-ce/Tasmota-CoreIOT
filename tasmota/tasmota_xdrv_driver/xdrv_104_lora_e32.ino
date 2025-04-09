@@ -1,49 +1,29 @@
+/*
+  xdrv_104_lora_e32.ino - LoRa E32 support for Tasmota
+
+  SPDX-FileCopyrightText: 2024 Theo Arends
+
+  SPDX-License-Identifier: GPL-3.0-only
+*/
+
 #ifdef USE_LORA_E32_433
-#define XDRV_104 104 // Định danh driver trong hệ thống Tasmota
+/*********************************************************************************************\
+ * LoRa E32
+\*********************************************************************************************/
+
+#define XDRV_104 104
+
+/*********************************************************************************************/
 
 #include "LoRa_E32.h"
 #include "HardwareSerial.h"
-#define LORA_E32_433_RX 7 // RX của ESP32 (gắn với TX của LoRa)
-#define LORA_E32_433_TX 6 // TX của ESP32 (gắn với RX của LoRa)
+
 HardwareSerial * LoraSerial = nullptr;
 LoRa_E32 * Lora = nullptr;
-bool lora_e32 = false;
-struct Pkg {
-uint8_t id;
-char payload [64];
-};
-const char LoRaE32Commands[] PROGMEM = "|" // No Prefix
-                                             "SendLora|"
-                                             "e32test|"
-                                             "e32testset";
-void (*const LoRaE32Command[])(void) PROGMEM = {
-    &CmdSendLora,
-    &e32testCommand, &e32testsetCommand};
 
-void CmdSendLora(void)
-{
-    if (XdrvMailbox.data_len == 0)
-    {
-        AddLog(LOG_LEVEL_INFO, PSTR("Nothing to transmit"));
-        ResponseCmndDone();
-        return;
-    }
-    char *tran = XdrvMailbox.data;
-    AddLog(LOG_LEVEL_INFO, PSTR("Transmit data: %s"), tran);
-    ResponseStatus rs = Lora->sendMessage(tran);
-    AddLog(LOG_LEVEL_INFO, rs.getResponseDescription().c_str());
-    ResponseCmndDone();
-}
-void e32testCommand(void)
-{
-  LoraE32PrintInfomation();
-  ResponseCmndDone();
-}
-void e32testsetCommand(void)
-{
-  AddLog(LOG_LEVEL_INFO, PSTR("Custom1 Command Executed!"));
-  ResponseCmndDone();
-}
+#define LORA_BUF_SIZE 255
+bool lora_busy = false;
+char lora_buf[LORA_BUF_SIZE];
 void LoraE32Config(uint8_t channel = 20, uint8_t addrHigh = 0x01, uint8_t addrLow = 0x02, uint8_t baudRate = 3, uint8_t fixedTransmission = 0)
 {
     Configuration configuration;
@@ -102,8 +82,7 @@ void printModuleInformation(struct ModuleInformation moduleInformation)
 
   AddLog(LOG_LEVEL_INFO, PSTR("----------------------------------------"));
 }
-void LoraE32Init()
-{
+void LoraE32Init() {
 if (!PinUsed(GPIO_LORA_E32_RX) || !PinUsed(GPIO_LORA_E32_TX)) return;
 
 #if CONFIG_IDF_TARGET_ESP32S3
@@ -111,52 +90,27 @@ if (!PinUsed(GPIO_LORA_E32_RX) || !PinUsed(GPIO_LORA_E32_TX)) return;
   digitalWrite(Pin(GPIO_LORA_E32_RX), HIGH);
   sleep(1);
 #endif // CONFIG_IDF_TARGET_ESP32S3
-  LoraSerial = new HardwareSerial(1);
+  LoraSerial = new HardwareSerial(1); // HARD assigned UART1
   Lora = new LoRa_E32(Pin(GPIO_LORA_E32_TX), Pin(GPIO_LORA_E32_RX), LoraSerial, UART_BPS_RATE_9600, SERIAL_8N1);
-  if(!Lora) return;
-  lora_e32 = Lora->begin();
-  if(lora_e32) {
-     AddLog(LOG_LEVEL_INFO, PSTR("LoRa E32 Initialized successfully"));
-  } else AddLog(LOG_LEVEL_INFO, PSTR("LoRa E32 Initialized failed"));
+  if(Lora && Lora->begin()) {
+    AddLog(LOG_LEVEL_INFO, PSTR("LOR: LoRa E32 Initialized successfully"));
+  }else {
+    AddLog(LOG_LEVEL_INFO, PSTR("LOR: LoRa E32 Initialized failed"));
+    return;
+  } 
   LoraE32Config();
 }
-void LoraE32Processing()
-{
-  if (!lora_e32)
-    return;
-
-  // Kiểm tra có tin nhắn từ LoRa
-  if (Lora->available() > 1)
-  {
-    ResponseContainer rc = Lora->receiveMessageUntil('!');
-    if (rc.status.code == 1)
-    {
-      AddLog(LOG_LEVEL_INFO, PSTR("Receive Mess: "));
-      AddLog(LOG_LEVEL_INFO, rc.data.c_str());
-    }
-    else
-    {
-      AddLog(LOG_LEVEL_INFO, PSTR("ERROR!"));
-    }
-  }
-  // if(Lora->available() > 1){
-  //   ResponseStructContainer rc = Lora->receiveMessage(sizeof(Pkg));
-  //   if (rc.status.code == 1)
-  //     {
-  //       Pkg pkg;
-  //       memcpy(&pkg, rc.data, sizeof(Pkg));
-  //       rc.close();
-  //       AddLog(LOG_LEVEL_INFO, PSTR("ID: %u, Payload: %s"), pkg.id, pkg.payload);
-  //       // AddLog(LOG_LEVEL_INFO, rc.data.c_str());
-  //     }
-  //     else
-  //     {
-  //       AddLog(LOG_LEVEL_INFO, PSTR("ERROR!"));
-  //     }
-  // }
+void LoraE32Processing() {
+  int data_len = Lora->available();
+  if (data_len <= 0) return;
+  AddLog(LOG_LEVEL_INFO, PSTR("LOR: Receiving..."));
+  lora_busy = true;
+  ResponseContainer rc = Lora->receiveMessageUntil('\n');
+  lora_busy = false;
+  if(rc.status.code != E32_SUCCESS) return;
+  AddLog(LOG_LEVEL_INFO, PSTR("LOR: Rcvd (%d): %s"), rc.data.length(), rc.data.c_str());
 }
-void LoraE32PrintInfomation(){
-  if(!Lora) return;
+void LoraE32PrintInfomation() {
   Configuration configuration;
   ModuleInformation moduleInformation;
   ResponseStructContainer rc;
@@ -171,38 +125,103 @@ void LoraE32PrintInfomation(){
   printParameters(configuration);
   printModuleInformation(moduleInformation);
 }
-bool Xdrv104(uint32_t function)
-{
+void LoraE32SendData() {
+  if (lora_buf[0] == '\0') return;
+  if (lora_busy) return;
 
+  lora_busy = true;
+  ResponseStatus rs = Lora->sendMessage(lora_buf);
+  lora_busy = false;
+
+  lora_buf[0] = '\0';
+}
+
+/*********************************************************************************************\
+ * Commands
+\*********************************************************************************************/
+const char kLoRaE32Commands[] PROGMEM = "|" // No Prefix
+                                             "e32test|"
+                                             "LoraSend|"
+                                             "e32testset";
+void (*const LoRaE32Command[])(void) PROGMEM = {
+    &e32testCommand, &CmndLoraSend, &e32testsetCommand};
+
+void e32testCommand(void)
+{
+  LoraE32PrintInfomation();
+  ResponseCmndDone();
+}
+void e32testsetCommand(void)
+{
+  AddLog(LOG_LEVEL_INFO, PSTR("Custom1 Command Executed!"));
+  ResponseCmndDone();
+}
+void CmndLoraSend(void) {
+  // LoRaSend "Hello Tiger"     - Send "Hello Tiger\n"
+  // LoRaSend                   - Set to text decoding
+  // LoRaSend1 "Hello Tiger"    - Send "Hello Tiger\n"
+  // LoRaSend2 "Hello Tiger"    - Send "Hello Tiger"
+  // LoRaSend3 "Hello Tiger"    - Send "Hello Tiger\f"
+  if ((XdrvMailbox.index < 0) || (XdrvMailbox.index > 3)) {
+    AddLog(LOG_LEVEL_INFO, PSTR("LOR: Invalid LoraSend index"));
+    ResponseCmndFailed();
+    return;
+  }
+
+  memset(lora_buf, 0, LORA_BUF_SIZE);
+  uint32_t len = XdrvMailbox.data_len;
+  const char *src = XdrvMailbox.data;
+  AddLog(LOG_LEVEL_INFO, PSTR("LOR: Send (%d)"), len);
+  switch (XdrvMailbox.index) {
+    case 0:  // LoRaSend "abc" => "abc\n"
+    case 1:
+      len = snprintf(lora_buf, LORA_BUF_SIZE, "%s\n", src);
+      break;
+
+    case 2:
+      strlcpy(lora_buf, src, LORA_BUF_SIZE);
+      len = strlen(lora_buf);
+      break;
+
+    case 3:
+      strlcpy(lora_buf, src, LORA_BUF_SIZE - 2);
+      len = strlen(lora_buf);
+      lora_buf[len++] = '\f';
+      lora_buf[len] = '\0';
+      break;
+  }
+
+  LoraE32SendData();
+  ResponseCmndDone();
+}
+
+/*********************************************************************************************\
+ * Interface
+\*********************************************************************************************/
+
+bool Xdrv104(uint32_t function) {
   bool result = false;
 
-  if (FUNC_INIT == function)
-  {
-    // AddLog(LOG_LEVEL_INFO, PSTR("INIT"));
+  if (FUNC_INIT == function) {
     LoraE32Init();
   }
-  else if (lora_e32)
-  {
-
-    switch (function)
-    {
-      //    Select suitable interval for polling your function
-    // case FUNC_EVERY_SECOND:
-    //   AddLog(LOG_LEVEL_INFO, PSTR("EVERY SECOND"));
-    //   break;
-    case FUNC_EVERY_250_MSECOND:
-      LoraE32Processing();
-      break;
-    case FUNC_COMMAND:
-      result = DecodeCommand(LoRaE32Commands, LoRaE32Command);
-      break;
-      // case FUNC_EVERY_SECOND:
-      //   break;
-      //    case FUNC_EVERY_200_MSECOND:
-      //    case FUNC_EVERY_100_MSECOND:
+  else if (Lora) {
+    switch (function) {
+      case FUNC_LOOP:
+      case FUNC_SLEEP_LOOP:
+        LoraE32Processing();
+        break;
+      case FUNC_EVERY_100_MSECOND:
+        LoraE32SendData();
+        break;
+      case FUNC_COMMAND:
+        result = DecodeCommand(kLoRaE32Commands, LoRaE32Command);
+        break;
+      case FUNC_ACTIVE:
+        result = true;
+        break;
     }
   }
-
   return result;
 }
 #endif // USE_LORA_E32_433
