@@ -23,38 +23,38 @@
 // User selectable GPIO functionality
 // ATTENTION: Only add at the end of this list just before GPIO_SENSOR_END
 //            Then add the same name(s) in a nice location in array kGpioNiceList
-enum UserSelectablePins {
-  GPIO_NONE,                           // Not used
-  GPIO_KEY1, GPIO_KEY1_NP, GPIO_KEY1_INV, GPIO_KEY1_INV_NP, // 4 x Button
-  GPIO_SWT1, GPIO_SWT1_NP,             // 8 x User connected external switches
-  GPIO_REL1, GPIO_REL1_INV,            // 8 x Relays
-  GPIO_LED1, GPIO_LED1_INV,            // 4 x Leds
-  GPIO_CNTR1, GPIO_CNTR1_NP,           // 4 x Counter
-  GPIO_PWM1, GPIO_PWM1_INV,            // 5 x PWM
-  GPIO_BUZZER, GPIO_BUZZER_INV,        // Buzzer
-  GPIO_LEDLNK, GPIO_LEDLNK_INV,        // Link led
-  GPIO_I2C_SCL, GPIO_I2C_SDA,          // Software I2C
-  GPIO_SPI_MISO, GPIO_SPI_MOSI, GPIO_SPI_CLK, GPIO_SPI_CS, GPIO_SPI_DC,        // Hardware SPI
-  GPIO_SSPI_MISO, GPIO_SSPI_MOSI, GPIO_SSPI_SCLK, GPIO_SSPI_CS, GPIO_SSPI_DC,  // Software SPI
-  GPIO_BACKLIGHT,                      // Display backlight control
-  GPIO_OLED_RESET,                     // OLED Display Reset
-  GPIO_IRSEND, GPIO_IRRECV,            // IR interface
-  GPIO_RFSEND, GPIO_RFRECV,            // RF interface
-  GPIO_DHT11, GPIO_DHT22, GPIO_SI7021, GPIO_DHT11_OUT,  // DHT11, DHT21, DHT22, AM2301, AM2302, AM2321
-  GPIO_DSB, GPIO_DSB_OUT,              // DS18B20 or DS18S20
-  GPIO_WS2812,                         // WS2812 Led string
-  GPIO_MHZ_TXD, GPIO_MHZ_RXD,          // MH-Z19 Serial interface
-  GPIO_PZEM0XX_TX, GPIO_PZEM004_RX, GPIO_PZEM016_RX, GPIO_PZEM017_RX, // PZEM Serial Modbus interface
-  GPIO_SAIR_TX, GPIO_SAIR_RX,          // SenseAir Serial interface
-  GPIO_PMS5003_TX, GPIO_PMS5003_RX,    // Plantower PMS5003 Serial interface
-  GPIO_SDS0X1_TX, GPIO_SDS0X1_RX,      // Nova Fitness SDS011 Serial interface
-  GPIO_SBR_TX, GPIO_SBR_RX,            // Serial Bridge Serial interface
-  GPIO_SR04_TRIG, GPIO_SR04_ECHO,      // SR04 interface
-  GPIO_SDM120_TX, GPIO_SDM120_RX,      // SDM120 Serial interface
-  GPIO_SDM630_TX, GPIO_SDM630_RX,      // SDM630 Serial interface
-  GPIO_TM1638CLK, GPIO_TM1638DIO, GPIO_TM1638STB,  // TM1638 interface
-  GPIO_MP3_DFR562,                     // RB-DFR-562, DFPlayer Mini MP3 Player
-  GPIO_HX711_SCK, GPIO_HX711_DAT,      // HX711 Load Cell interface
+  enum UserSelectablePins {
+    GPIO_NONE,                           // Not used
+    GPIO_KEY1, GPIO_KEY1_NP, GPIO_KEY1_INV, GPIO_KEY1_INV_NP, // 4 x Button
+    GPIO_SWT1, GPIO_SWT1_NP,             // 8 x User connected external switches
+    GPIO_REL1, GPIO_REL1_INV,            // 8 x Relays
+    GPIO_LED1, GPIO_LED1_INV,            // 4 x Leds
+    GPIO_CNTR1, GPIO_CNTR1_NP,           // 4 x Counter
+    GPIO_PWM1, GPIO_PWM1_INV,            // 5 x PWM
+    GPIO_BUZZER, GPIO_BUZZER_INV,        // Buzzer
+    GPIO_LEDLNK, GPIO_LEDLNK_INV,        // Link led
+    GPIO_I2C_SCL, GPIO_I2C_SDA,          // Software I2C
+    GPIO_SPI_MISO, GPIO_SPI_MOSI, GPIO_SPI_CLK, GPIO_SPI_CS, GPIO_SPI_DC,        // Hardware SPI
+    GPIO_SSPI_MISO, GPIO_SSPI_MOSI, GPIO_SSPI_SCLK, GPIO_SSPI_CS, GPIO_SSPI_DC,  // Software SPI
+    GPIO_BACKLIGHT,                      // Display backlight control
+    GPIO_OLED_RESET,                     // OLED Display Reset
+    GPIO_IRSEND, GPIO_IRRECV,            // IR interface
+    GPIO_RFSEND, GPIO_RFRECV,            // RF interface
+    GPIO_DHT11, GPIO_DHT22, GPIO_SI7021, GPIO_DHT11_OUT,  // DHT11, DHT21, DHT22, AM2301, AM2302, AM2321
+    GPIO_DSB, GPIO_DSB_OUT,              // DS18B20 or DS18S20
+    GPIO_WS2812,                         // WS2812 Led string
+    GPIO_MHZ_TXD, GPIO_MHZ_RXD,          // MH-Z19 Serial interface
+    GPIO_PZEM0XX_TX, GPIO_PZEM004_RX, GPIO_PZEM016_RX, GPIO_PZEM017_RX, // PZEM Serial Modbus interface
+    GPIO_SAIR_TX, GPIO_SAIR_RX,          // SenseAir Serial interface
+    GPIO_PMS5003_TX, GPIO_PMS5003_RX,    // Plantower PMS5003 Serial interface
+    GPIO_SDS0X1_TX, GPIO_SDS0X1_RX,      // Nova Fitness SDS011 Serial interface
+    GPIO_SBR_TX, GPIO_SBR_RX,            // Serial Bridge Serial interface
+    GPIO_SR04_TRIG, GPIO_SR04_ECHO,      // SR04 interface
+    GPIO_SDM120_TX, GPIO_SDM120_RX,      // SDM120 Serial interface
+    GPIO_SDM630_TX, GPIO_SDM630_RX,      // SDM630 Serial interface
+    GPIO_TM1638CLK, GPIO_TM1638DIO, GPIO_TM1638STB,  // TM1638 interface
+    GPIO_MP3_DFR562,                     // RB-DFR-562, DFPlayer Mini MP3 Player
+    GPIO_HX711_SCK, GPIO_HX711_DAT,      // HX711 Load Cell interface
   GPIO_TX2X_TXD_BLACK,                 // TX20/TX23 Transmission Pin
   GPIO_TUYA_TX, GPIO_TUYA_RX,          // Tuya Serial interface
   GPIO_MGC3130_XFER, GPIO_MGC3130_RESET,  // MGC3130 interface
@@ -1161,10 +1161,11 @@ const uint16_t kGpioNiceList[] PROGMEM = {
 #endif
 #endif
 #endif
-#ifdef USE_LORA_E32_433
+#if defined(USE_LORA_E32_433) || defined(USE_LORA_E32)
   AGPIO(GPIO_LORA_E32_TX),
   AGPIO(GPIO_LORA_E32_RX),
 #endif
+
 /*-------------------------------------------------------------------------------------------*\
  * Other sensors
 \*-------------------------------------------------------------------------------------------*/

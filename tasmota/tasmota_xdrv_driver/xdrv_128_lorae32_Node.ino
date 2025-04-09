@@ -70,8 +70,9 @@ void CmdSendLora(void){
   else
   {
     char*data =XdrvMailbox.data;
+    int len = XdrvMailbox.data_len;
     AddLog(LOG_LEVEL_INFO, PSTR("Lora Transmit : %s"), data);
-    ResponseStatus rs = my_lora_e32.sendMessage(data);
+    ResponseStatus rs = my_lora_e32->sendMessage(data,len);
     AddLog(LOG_LEVEL_INFO, rs.getResponseDescription().c_str());
     ResponseCmndDone();
   }
@@ -96,6 +97,7 @@ void CmdBeginLora(void){
   DeserializationError error = deserializeJson(doc,XdrvMailbox.data);
   if(error){
     AddLog(LOG_LEVEL_INFO, "JSON parse error");
+    ResponseCmndDone();
   }
   else{
 
@@ -113,6 +115,7 @@ void CmdBeginLora(void){
       }
       configMyLoraE32(channel,addrHigh,addrLow,Baudrate,fixedTransmission);
     }
+    ResponseCmndDone();
   }
 }
 void CmdSendLoraTelemetry(void)
@@ -123,55 +126,27 @@ void CmdSendLoraTelemetry(void)
         ResponseCmndDone();
         return;
     }
-
-    // Parse JSON payload từ Berry
+    // Tạo JSON có cấu trúc { "DeviceA": [ { ... } ] }
     StaticJsonDocument<256> doc;
-    DeserializationError error = deserializeJson(doc, XdrvMailbox.data);
-    if (error)
-    {
-        AddLog(LOG_LEVEL_ERROR, PSTR("Failed to parse telemetry JSON"));
+    JsonArray arr = doc.createNestedArray(String(device_info.device_name));
+    JsonObject data = arr.createNestedObject();
+
+    StaticJsonDocument<128> mailboxDoc;
+    DeserializationError error = deserializeJson(mailboxDoc, XdrvMailbox.data);
+    if (error) {
+        AddLog(LOG_LEVEL_ERROR, PSTR("JSON parse error"));
         ResponseCmndDone();
         return;
     }
-
-    // Chuẩn bị struct telemetry
-    Lora lora_data = Lora_init_zero;
-    lora_data.has_telemetry = true;
-
-    JsonObject obj = doc.as<JsonObject>();
-
-    // Gán dữ liệu V1..V10 nếu có
-    if (obj.containsKey("V1") && !obj["V1"].isNull()) lora_data.telemetry.temperature = obj["V1"];
-    if (obj.containsKey("V2") && !obj["V2"].isNull()) lora_data.telemetry.humidity = obj["V2"];
-    if (obj.containsKey("V3") && !obj["V3"].isNull()) lora_data.telemetry.soil_moisture = obj["V3"];
-    if (obj.containsKey("V4") && !obj["V4"].isNull()) lora_data.telemetry.soil_temperature = obj["V4"];
-    if (obj.containsKey("V5") && !obj["V5"].isNull()) lora_data.telemetry.ph_level = obj["V5"];
-    if (obj.containsKey("V6") && !obj["V6"].isNull()) lora_data.telemetry.ec_level = obj["V6"];
-    if (obj.containsKey("V7") && !obj["V7"].isNull()) lora_data.telemetry.light_intensity = obj["V7"];
-    if (obj.containsKey("V8") && !obj["V8"].isNull()) lora_data.telemetry.co2_level = obj["V8"];
-    if (obj.containsKey("V9") && !obj["V9"].isNull()) lora_data.telemetry.rainfall_level = obj["V9"];
-    if (obj.containsKey("V10") && !obj["V10"].isNull()) lora_data.telemetry.leaf_wetness = obj["V10"];
-    
-
-    // Encode bằng Nanopb
-    uint8_t buffer[256];  // Giá trị tối đa Lora E32 có thể gửi
-    pb_ostream_t stream = pb_ostream_from_buffer(buffer, sizeof(buffer));
-    bool status = pb_encode(&stream, Lora_fields, &lora_data);
-    if (!status)
-    {
-        AddLog(LOG_LEVEL_ERROR, PSTR("Failed to encode telemetry data"));
-        ResponseCmndDone();
-        return;
-    }
-
-    // Gửi qua LoRa
-    ResponseStatus rs = my_lora_e32.sendMessage(buffer, stream.bytes_written);
-    AddLog(LOG_LEVEL_INFO, PSTR("LoRa Send: %s"), rs.getResponseDescription().c_str());
-
-    // Debug log JSON gốc nếu cần
-    AddLog(LOG_LEVEL_INFO, PSTR("Lora JSON: %s"), XdrvMailbox.data);
-
-    ResponseCmndDone();
+    for (JsonPair p : mailboxDoc.as<JsonObject>()) {
+      data[p.key()] = p.value();
+  }
+  String json_string;
+  serializeJson(doc, json_string);
+  int len = json_string.length();
+  ResponseStatus rs = my_lora_e32->sendMessage(json_string.c_str(), len);
+  AddLog(LOG_LEVEL_INFO, PSTR("LoRa Send: %s,with len is %d"), rs.getResponseDescription().c_str(),len);
+  ResponseCmndDone();
 }
 
 void CmdSendLoraAttribute(void){
@@ -187,7 +162,7 @@ void CmdSendLoraAttribute(void){
     String json_string;
     serializeJson(doc,json_string);
     AddLog(LOG_LEVEL_INFO, PSTR("Mess from ESP32S3: %s"), json_string.c_str());
-    ResponseStatus rs = my_lora_e32.sendMessage(json_string);
+    ResponseStatus rs = my_lora_e32->sendMessage(json_string.c_str(),json_string.length());
     AddLog(LOG_LEVEL_INFO, rs.getResponseDescription().c_str());
     ResponseCmndDone();
 }
@@ -247,11 +222,11 @@ void printModuleInformation(struct ModuleInformation moduleInformation)
   AddLog(LOG_LEVEL_INFO, PSTR("----------------------------------------"));
 }
 void CmdPrintLora(void){
-  ResponseStructContainer c = my_lora_e32.getConfiguration();
+  ResponseStructContainer c = my_lora_e32->getConfiguration();
   Configuration configuration = *(Configuration *)c.data;
   printParameters(configuration);
   ResponseStructContainer cMi;
-  cMi = my_lora_e32.getModuleInformation();
+  cMi = my_lora_e32->getModuleInformation();
   ModuleInformation mi = *(ModuleInformation *)cMi.data;
   printModuleInformation(mi);
 }
@@ -261,37 +236,20 @@ bool initSuccess = false;
 
 void LoraE32Init()
 {
-  // Gọi hàm khởi tạo từ MY_LORA_E32.h
+  // Gọi hàm khởi tạo từ my_lora_e32->h
+  if (!PinUsed(GPIO_LORA_E32_RX) || !PinUsed(GPIO_LORA_E32_TX)) return;
   initSuccess = true;
-  my_lora_e32.begin();
+  my_lora_e32 = new LoRa_E32(
+    Pin(GPIO_LORA_E32_TX), 
+    Pin(GPIO_LORA_E32_RX), 
+    &LoraSerial, 
+    UART_BPS_RATE_9600,
+    SERIAL_8N1
+  );
+  my_lora_e32->begin();
   configMyLoraE32(20, 0x01, 0x02, 3);
-  ResponseStructContainer c = my_lora_e32.getConfiguration();
+  ResponseStructContainer c = my_lora_e32->getConfiguration();
   pinMode(LED_Pin,OUTPUT); // Pin for RPC
-  uint8_t buffer_encode[256];
-  pb_ostream_t stream = pb_ostream_from_buffer(buffer_encode,sizeof(buffer_encode));
-  const char* device_name = "Device B";
-  const uint8_t addr_hi[] = {0x12};
-  const uint8_t addr_lo[] = {0x22};
-  Lora lora = Lora_init_zero;
-  lora.has_info = true;
-
-  lora.info.deviceName.arg = (void*) device_name;
-  lora.info.deviceName.funcs.encode = &encode_string;
-  
-  lora.info.addrHigh.arg = (void*) addr_hi;
-  lora.info.addrHigh.funcs.encode = &encode_byte;
-
-  lora.info.addrLow.arg = (void*) addr_lo;
-  lora.info.addrLow.funcs.encode = &encode_byte;
-
-  if(pb_encode(&stream,Lora_fields,&lora)){
-    AddLog(LOG_LEVEL_INFO,PSTR("Encode Success"));
-    uint16_t len = stream.bytes_written;
-    char buf[64];
-    snprintf(buf, sizeof(buf), "Value: %d", len);
-    AddLog(LOG_LEVEL_INFO, buf);
-    my_lora_e32.sendMessage(buffer_encode,len);
-  }
   if (c.data == NULL)
   {
     AddLog(LOG_LEVEL_INFO, PSTR("Config NULL"));
@@ -302,7 +260,7 @@ void LoraE32Init()
     Configuration configuration = *(Configuration *)c.data;
     // printParameters(configuration);
     ResponseStructContainer cMi;
-    cMi = my_lora_e32.getModuleInformation();
+    cMi = my_lora_e32->getModuleInformation();
     ModuleInformation mi = *(ModuleInformation *)cMi.data;
     // printModuleInformation(mi);
   }
@@ -316,14 +274,14 @@ void LoraE32Processing()
     return;
 
   // Kiểm tra có tin nhắn từ LoRa
-  if (my_lora_e32.available() > 1)
+  if (my_lora_e32->available() > 1)
   {
-    ResponseContainer rc = my_lora_e32.receiveMessage();
+    ResponseContainer rc = my_lora_e32->receiveMessage();
     if (rc.status.code == 1)
     {
       AddLog(LOG_LEVEL_INFO, PSTR("Receive Mess: "));
       AddLog(LOG_LEVEL_INFO, rc.data.c_str());
-      processRpcCommand(rc.data.c_str());
+      processRpcCommand(rc.data.c_str(),rc.data.length());
     }
     else
     {
@@ -334,7 +292,7 @@ void LoraE32Processing()
 
 
 
-void processRpcCommand(const char* jsonMessage){
+void processRpcCommand(const char* jsonMessage,int len){
   StaticJsonDocument<256> doc; // Bộ nhớ cho json
   DeserializationError error = deserializeJson(doc,jsonMessage);
   if(error){
@@ -367,7 +325,7 @@ void processRpcCommand(const char* jsonMessage){
   if(strcmp(method,"POWER1") == 0){
       AddLog(LOG_LEVEL_INFO,PSTR("Set Led to %d"),params);
       digitalWrite(LED_Pin,params);
-      my_lora_e32.sendMessage(jsonMessage);
+      my_lora_e32->sendMessage(jsonMessage,len);
   }
   // else if(){
   /* More RPC in here*/
@@ -383,7 +341,6 @@ bool Xdrv128(uint32_t function)
   {
     // AddLog(LOG_LEVEL_INFO, PSTR("INIT"));
     LoraE32Init();
-    initSuccess = true;
   }
   else if (initSuccess)
   {

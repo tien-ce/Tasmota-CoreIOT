@@ -6,16 +6,6 @@
 #include "LoRa_E32.h"
 #include "ArduinoJson.h"
 #include "HardwareSerial.h"
-#include "employess.pb.h"
-#include "pb_encode.h"
-#include "pb_decode.h"
-#include "pb_common.h"
-/***************************ENCODE - DECODE********************************** */
-bool encode_string(pb_ostream_t *stream ,const pb_field_t *field,void * const *arg);
-bool decode_string(pb_istream_t *stream, const pb_field_t *field, void **arg);
-bool encode_byte(pb_ostream_t *stream, const pb_field_t *field, void * const *arg);
-bool decode_byte(pb_istream_t *stream, const pb_field_t *field, void **arg);
-/**************************************************************************** */
 class Device_info{
     public:
     String device_name;
@@ -48,8 +38,7 @@ extern Device_info device_info;
 extern HardwareSerial LoraSerial;
 
 // Khai báo đối tượng LoRa_E32 (sẽ được định nghĩa trong MY_LORA_E32.cpp)
-extern LoRa_E32 my_lora_e32;
-
+extern LoRa_E32* my_lora_e32;
 // Thông tin thiết bị
 // Khai báo các hàm cấu hình và in thông số
 void configMyLoraE32(uint8_t channel, uint8_t addrHigh, uint8_t addrLow, uint8_t baudRate = 3,uint8_t fixedTransmission = 0);
