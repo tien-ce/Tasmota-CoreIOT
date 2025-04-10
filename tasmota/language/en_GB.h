@@ -1025,7 +1025,8 @@
 #define D_SENSOR_C8_CO2_5K_TX  "C8-CO2-5K Tx"
 #define D_GPIO_LORA_E32_TX     "LoRa E32 Tx"
 #define D_GPIO_LORA_E32_RX     "LoRa E32 Rx"
-
+#define D_GPIO_LORA_E32_M0     "LoRa E32 M0"
+#define D_GPIO_LORA_E32_M1     "LoRa E32 M1"
 
 // Units
 #define D_UNIT_AMPERE "A"

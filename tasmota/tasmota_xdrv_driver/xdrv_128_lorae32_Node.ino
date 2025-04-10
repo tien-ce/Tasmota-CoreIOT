@@ -21,6 +21,9 @@
 #include "ArduinoJson.h" 
 /****************************************************************************************** */
 #define LED_Pin 10
+#define AUX_Pin 21
+uint32_t M0_Pin;
+uint32_t M1_Pin;
 /*********************************************************************************************\
 * LoraE32 command
 // This variable will be set to true after initialization
@@ -69,10 +72,15 @@ void CmdSendLora(void){
   }
   else
   {
-    char*data =XdrvMailbox.data;
+    char* data = XdrvMailbox.data;
     int len = XdrvMailbox.data_len;
     AddLog(LOG_LEVEL_INFO, PSTR("Lora Transmit : %s"), data);
-    ResponseStatus rs = my_lora_e32->sendMessage(data,len);
+
+    //  Set M0, M1 LOW để vào Normal mode trước khi gửi
+    digitalWrite(M0_Pin, LOW);
+    digitalWrite(M1_Pin, LOW);
+
+    ResponseStatus rs = my_lora_e32->sendMessage(data, len);
     AddLog(LOG_LEVEL_INFO, rs.getResponseDescription().c_str());
     ResponseCmndDone();
   }
@@ -80,13 +88,13 @@ void CmdSendLora(void){
 
 void CmdSetNameLora(void){
   if(XdrvMailbox.data_len == 0){
-    AddLog(LOG_LEVEL_INFO,PSTR("Can not set name, no data name"));
+    AddLog(LOG_LEVEL_INFO, PSTR("Can not set name, no data name"));
     ResponseCmndDone();
     return;
   }
   else{
-    AddLog(LOG_LEVEL_INFO,PSTR("Set Name Device: "));
-    AddLog(LOG_LEVEL_INFO,XdrvMailbox.data);
+    AddLog(LOG_LEVEL_INFO, PSTR("Set Name Device: "));
+    AddLog(LOG_LEVEL_INFO, XdrvMailbox.data);
     device_info.device_name = String(XdrvMailbox.data);
     ResponseCmndDone();
   }
@@ -94,12 +102,16 @@ void CmdSetNameLora(void){
 
 void CmdBeginLora(void){
   StaticJsonDocument<256> doc;
-  DeserializationError error = deserializeJson(doc,XdrvMailbox.data);
+  DeserializationError error = deserializeJson(doc, XdrvMailbox.data);
   if(error){
     AddLog(LOG_LEVEL_INFO, "JSON parse error");
     ResponseCmndDone();
   }
   else{
+
+    //  Set M0, M1 HIGH để vào chế độ cấu hình
+    digitalWrite(M0_Pin, HIGH);
+    digitalWrite(M1_Pin, HIGH);
 
     if(doc.containsKey("channel") && doc.containsKey("addrHigh") && doc.containsKey("addrLow")){
       uint8_t Baudrate = 3;
@@ -113,11 +125,12 @@ void CmdBeginLora(void){
       if(doc.containsKey("fixedTransmission")){
         fixedTransmission = doc["fixedTransmission"];
       }
-      configMyLoraE32(channel,addrHigh,addrLow,Baudrate,fixedTransmission);
+      configMyLoraE32(channel, addrHigh, addrLow, Baudrate, fixedTransmission);
     }
     ResponseCmndDone();
   }
 }
+
 void CmdSendLoraTelemetry(void)
 {
     if (XdrvMailbox.data_len == 0)
@@ -126,7 +139,11 @@ void CmdSendLoraTelemetry(void)
         ResponseCmndDone();
         return;
     }
-    // Tạo JSON có cấu trúc { "DeviceA": [ { ... } ] }
+
+    //  Set M0, M1 LOW để vào chế độ gửi
+    digitalWrite(M0_Pin, LOW);
+    digitalWrite(M1_Pin, LOW);
+
     StaticJsonDocument<256> doc;
     JsonArray arr = doc.createNestedArray(String(device_info.device_name));
     JsonObject data = arr.createNestedObject();
@@ -140,33 +157,34 @@ void CmdSendLoraTelemetry(void)
     }
     for (JsonPair p : mailboxDoc.as<JsonObject>()) {
       data[p.key()] = p.value();
-  }
-  String json_string;
-  serializeJson(doc, json_string);
-  int len = json_string.length();
-  ResponseStatus rs = my_lora_e32->sendMessage(json_string.c_str(), len);
-  AddLog(LOG_LEVEL_INFO, PSTR("LoRa Send: %s,with len is %d"), rs.getResponseDescription().c_str(),len);
-  ResponseCmndDone();
+    }
+    String json_string;
+    serializeJson(doc, json_string);
+    int len = json_string.length();
+    ResponseStatus rs = my_lora_e32->sendMessage(json_string.c_str(), len);
+    AddLog(LOG_LEVEL_INFO, PSTR("LoRa Send: %s, with len is %d"), rs.getResponseDescription().c_str(), len);
+    ResponseCmndDone();
 }
 
 void CmdSendLoraAttribute(void){
+    //  Set M0, M1 LOW để vào chế độ gửi
+    digitalWrite(M0_Pin, LOW);
+    digitalWrite(M1_Pin, LOW);
+
     StaticJsonDocument<58> doc;
-    // Tạo đối tượng "device A" với nested object
     JsonObject deviceA = doc.createNestedObject(device_info.device_name);
 
-    // Thêm dữ liệu vào "device A"
     deviceA["addrHigh"] = device_info.addrHigh;
     deviceA["addrLow"] = device_info.addrLow;
     deviceA["longitude"] = device_info.longitude;
     deviceA["latitude"] = device_info.latitude;
     String json_string;
-    serializeJson(doc,json_string);
+    serializeJson(doc, json_string);
     AddLog(LOG_LEVEL_INFO, PSTR("Mess from ESP32S3: %s"), json_string.c_str());
-    ResponseStatus rs = my_lora_e32->sendMessage(json_string.c_str(),json_string.length());
+    ResponseStatus rs = my_lora_e32->sendMessage(json_string.c_str(), json_string.length());
     AddLog(LOG_LEVEL_INFO, rs.getResponseDescription().c_str());
     ResponseCmndDone();
 }
-
 
 void CmdSendData(void)
 {
@@ -178,7 +196,6 @@ void CmdSendData(void)
     }
 
     AddLog(LOG_LEVEL_INFO, PSTR("Receive from console: %s"), XdrvMailbox.data);
-
     ResponseCmndDone();
 }
 /*************************************** LOG DETAIL LORA ****************************************************** */
@@ -237,12 +254,21 @@ bool initSuccess = false;
 void LoraE32Init()
 {
   // Gọi hàm khởi tạo từ my_lora_e32->h
-  if (!PinUsed(GPIO_LORA_E32_RX) || !PinUsed(GPIO_LORA_E32_TX)) return;
+  if (!PinUsed(GPIO_LORA_E32_RX) || !PinUsed(GPIO_LORA_E32_TX) || !PinUsed(GPIO_LORA_E32_M0) || !PinUsed(GPIO_LORA_E32_M1)) return;
   initSuccess = true;
+  M0_Pin = Pin(GPIO_LORA_E32_M0);
+  M1_Pin = Pin(GPIO_LORA_E32_M1);
+  pinMode(M0_Pin,OUTPUT);
+  pinMode(M1_Pin,OUTPUT);
+  digitalWrite(M0_Pin,LOW);
+  digitalWrite(M1_Pin,LOW);
   my_lora_e32 = new LoRa_E32(
     Pin(GPIO_LORA_E32_TX), 
     Pin(GPIO_LORA_E32_RX), 
-    &LoraSerial, 
+    &LoraSerial,
+    AUX_Pin,
+    M0_Pin,
+    M1_Pin,
     UART_BPS_RATE_9600,
     SERIAL_8N1
   );
@@ -270,6 +296,8 @@ void LoraE32Init()
 // Xử lý gửi/nhận dữ liệu
 void LoraE32Processing()
 {
+  // digitalWrite(M0_Pin,LOW);
+  // digitalWrite(M1_Pin,LOW);
   if (!initSuccess)
     return;
 
@@ -294,10 +322,13 @@ void LoraE32Processing()
 
 void processRpcCommand(const char* jsonMessage,int len){
   StaticJsonDocument<256> doc; // Bộ nhớ cho json
-  DeserializationError error = deserializeJson(doc,jsonMessage);
-  if(error){
+  deserializeJson(doc,jsonMessage);
+  if(!doc.is<JsonObject>()){
       // AddLog(LOG_LEVEL_INFO,PSTR("JSON Parsing Failed"));
       return;
+  }
+  if(!doc.containsKey("data")){
+    return;
   }
   // Trích xuất dữ liệu từ json
   String device = doc["device"];

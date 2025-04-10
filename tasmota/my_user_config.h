@@ -1421,4 +1421,7 @@
   #define USE_I2S_OPUS
 #endif // USE_I2S_ALL
 
+#ifndef USE_LORA_E32
+#define USE_LORA_E32
+#endif
 #endif  // _MY_USER_CONFIG_H_
