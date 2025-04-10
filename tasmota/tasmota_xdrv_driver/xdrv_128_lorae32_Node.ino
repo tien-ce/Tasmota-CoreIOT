@@ -21,9 +21,9 @@
 #include "ArduinoJson.h" 
 /****************************************************************************************** */
 #define LED_Pin 10
-#define AUX_Pin 21
 uint32_t M0_Pin;
 uint32_t M1_Pin;
+uint32_t AUX_Pin = -1;
 /*********************************************************************************************\
 * LoraE32 command
 // This variable will be set to true after initialization
@@ -262,6 +262,9 @@ void LoraE32Init()
   pinMode(M1_Pin,OUTPUT);
   digitalWrite(M0_Pin,LOW);
   digitalWrite(M1_Pin,LOW);
+  if(PinUsed(GPIO_LORA_E32_AUX)){
+    AUX_Pin =  Pin(GPIO_LORA_E32_AUX);
+  }
   my_lora_e32 = new LoRa_E32(
     Pin(GPIO_LORA_E32_TX), 
     Pin(GPIO_LORA_E32_RX), 
