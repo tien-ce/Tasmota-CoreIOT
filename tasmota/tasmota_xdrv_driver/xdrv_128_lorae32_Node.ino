@@ -321,7 +321,46 @@ void LoraE32Processing()
   }
 }
 
+void LORA_E32_COLLECT_DATA() {
+  ResponseClear();
+  XsnsCall(FUNC_JSON_APPEND);
+  const char* raw = ResponseData();
 
+  //  Bắt lỗi dấu phẩy ở đầu
+  String fixed = raw;
+  if (fixed.startsWith(",")) {
+      fixed = fixed.substring(1);  // Bỏ dấu phẩy đầu
+  }
+  fixed = "{" + fixed + "}";       // Bọc thành JSON hoàn chỉnh
+
+  AddLog(LOG_LEVEL_INFO, PSTR("Sensor JSON fixed: %s"), fixed.c_str());
+
+  // Parse JSON
+  StaticJsonDocument<512> input_doc;
+  DeserializationError err = deserializeJson(input_doc, fixed);
+  if (err) {
+      AddLog(LOG_LEVEL_ERROR, PSTR("Sensor JSON parse error: %s"), err.c_str());
+      return;
+  }
+
+  // Gói lại JSON kiểu {"Device":[{...}]}
+  StaticJsonDocument<512> out_doc;
+  JsonArray arr = out_doc.createNestedArray(String(device_info.device_name));
+  JsonObject data = arr.createNestedObject();
+
+  for (JsonPair p : input_doc.as<JsonObject>()) {
+      data[p.key()] = p.value();
+  }
+
+  String final_payload;
+  serializeJson(out_doc, final_payload);
+
+  digitalWrite(M0_Pin, LOW);
+  digitalWrite(M1_Pin, LOW);
+
+  ResponseStatus rs = my_lora_e32->sendMessage(final_payload.c_str(), final_payload.length());
+  AddLog(LOG_LEVEL_INFO, PSTR("LoRa Send: %s | Payload: %s"), rs.getResponseDescription().c_str(), final_payload.c_str());
+}
 
 void processRpcCommand(const char* jsonMessage,int len){
   StaticJsonDocument<256> doc; // Bộ nhớ cho json
@@ -392,8 +431,11 @@ bool Xdrv128(uint32_t function)
       AddLog(LOG_LEVEL_DEBUG_MORE, PSTR("Calling My Project Command..."));
       result = DecodeCommand(MyProjectCommands, MyProjectCommand);
       break;
-      // case FUNC_EVERY_SECOND:
-      //   break;
+      case FUNC_EVERY_SECOND:
+        if (TasmotaGlobal.uptime % 10 == 0) {
+          LORA_E32_COLLECT_DATA();
+        }
+      break;
       //    case FUNC_EVERY_200_MSECOND:
       //    case FUNC_EVERY_100_MSECOND:
     }
