@@ -256,6 +256,11 @@ void LoraE32Init()
   // Gọi hàm khởi tạo từ my_lora_e32->h
   if (!PinUsed(GPIO_LORA_E32_RX) || !PinUsed(GPIO_LORA_E32_TX) || !PinUsed(GPIO_LORA_E32_M0) || !PinUsed(GPIO_LORA_E32_M1)) return;
   initSuccess = true;
+  String mac_str = WiFi.macAddress(); // "AB:CD:EF:GH:JK:LM"
+  int first = mac_str.lastIndexOf(":",mac_str.lastIndexOf(":",mac_str.lastIndexOf(":"))); // At :GH...
+  String mac_device = mac_str.substring(first+1); //"GT:JK:LM"
+  mac_device.replace(":",""); // Delete :GTJKLM
+  device_info.setLoraName(mac_device);
   M0_Pin = Pin(GPIO_LORA_E32_M0);
   M1_Pin = Pin(GPIO_LORA_E32_M1);
   pinMode(M0_Pin,OUTPUT);
@@ -325,7 +330,6 @@ void LORA_E32_COLLECT_DATA() {
   ResponseClear();
   XsnsCall(FUNC_JSON_APPEND);
   const char* raw = ResponseData();
-
   //  Bắt lỗi dấu phẩy ở đầu
   String fixed = raw;
   if (fixed.startsWith(",")) {
@@ -431,10 +435,8 @@ bool Xdrv128(uint32_t function)
       AddLog(LOG_LEVEL_DEBUG_MORE, PSTR("Calling My Project Command..."));
       result = DecodeCommand(MyProjectCommands, MyProjectCommand);
       break;
-      case FUNC_EVERY_SECOND:
-        if (TasmotaGlobal.uptime % 10 == 0) {
-          LORA_E32_COLLECT_DATA();
-        }
+    case FUNC_AFTER_TELEPERIOD:
+        LORA_E32_COLLECT_DATA();       
       break;
       //    case FUNC_EVERY_200_MSECOND:
       //    case FUNC_EVERY_100_MSECOND:
