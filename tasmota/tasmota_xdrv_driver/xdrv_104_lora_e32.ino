@@ -7,10 +7,10 @@
 */
 
 #ifdef USE_LORA_E32_433
+#define USE_LORA_E32_433_GATEWAY //to use Thingsboard MQTT gateway
 /*********************************************************************************************\
  * LoRa E32
 \*********************************************************************************************/
-#define USE_LORA_E32_433_GATEWAY //to use Thingsboard MQTT gateway
 #define XDRV_104 104
 
 /*********************************************************************************************/
@@ -18,14 +18,14 @@
 #include "LoRa_E32.h"
 #include "HardwareSerial.h"
 
-HardwareSerial * LoraSerial = nullptr;
-LoRa_E32 * Lora = nullptr;
-Configuration * lora_cfg = nullptr;
+HardwareSerial * LoraE32Serial = nullptr;
+LoRa_E32 * LoraE32 = nullptr;
+Configuration * lorae32_cfg = nullptr;
 
 #define LORA_BUF_SIZE 255
-bool lora_busy = false;
-char lora_buf[LORA_BUF_SIZE];
-bool lora_send_sensors = true;
+bool lorae32_busy = false;
+char lorae32_buf[LORA_BUF_SIZE];
+bool lorae32_send_sensors = true;
 
 #define D_JSON_ADDH "ADDH"
 #define D_JSON_ADDL "ADDL"
@@ -41,46 +41,46 @@ bool lora_send_sensors = true;
 
 void LoraE32Config(uint8_t channel = 20, uint8_t addrHigh = 0x01, uint8_t addrLow = 0x02, uint8_t baudRate = 3, uint8_t fixedTransmission = 0)
 {
-    lora_cfg->ADDH = addrHigh; // Địa chỉ cao
-    lora_cfg->ADDL = addrLow;  // Địa chỉ thấp
-    lora_cfg->CHAN = channel;  // Kênh truyền
-    lora_cfg->SPED.uartParity = 0;           // 8N1
-    lora_cfg->SPED.uartBaudRate = baudRate;  // Tốc độ baud UART
-    lora_cfg->SPED.airDataRate = 2;          // Tốc độ truyền không khí mặc định
-    lora_cfg->OPTION.fixedTransmission = fixedTransmission;  // Chế độ Transparent
-    lora_cfg->OPTION.ioDriveMode = 1;
-    lora_cfg->OPTION.wirelessWakeupTime = 3; // Wakeup Time mặc định
-    lora_cfg->OPTION.fec = 1;
-    lora_cfg->OPTION.transmissionPower = 0;
-    Lora->setConfiguration(*lora_cfg, WRITE_CFG_PWR_DWN_SAVE);
+    lorae32_cfg->ADDH = addrHigh; // Địa chỉ cao
+    lorae32_cfg->ADDL = addrLow;  // Địa chỉ thấp
+    lorae32_cfg->CHAN = channel;  // Kênh truyền
+    lorae32_cfg->SPED.uartParity = 0;           // 8N1
+    lorae32_cfg->SPED.uartBaudRate = baudRate;  // Tốc độ baud UART
+    lorae32_cfg->SPED.airDataRate = 2;          // Tốc độ truyền không khí mặc định
+    lorae32_cfg->OPTION.fixedTransmission = fixedTransmission;  // Chế độ Transparent
+    lorae32_cfg->OPTION.ioDriveMode = 1;
+    lorae32_cfg->OPTION.wirelessWakeupTime = 3; // Wakeup Time mặc định
+    lorae32_cfg->OPTION.fec = 1;
+    lorae32_cfg->OPTION.transmissionPower = 0;
+    LoraE32->setConfiguration(*lorae32_cfg, WRITE_CFG_PWR_DWN_SAVE);
 }
 void LoraE32Config2Json(void) {
-  ResponseAppend_P(PSTR(",\"" D_JSON_ADDH "\":%d"), lora_cfg->ADDH);
-  ResponseAppend_P(PSTR(",\"" D_JSON_ADDL "\":%d"), lora_cfg->ADDL);
-  ResponseAppend_P(PSTR(",\"" D_JSON_CHAN "\":%d"), lora_cfg->CHAN);
+  ResponseAppend_P(PSTR(",\"" D_JSON_ADDH "\":%d"), lorae32_cfg->ADDH);
+  ResponseAppend_P(PSTR(",\"" D_JSON_ADDL "\":%d"), lorae32_cfg->ADDL);
+  ResponseAppend_P(PSTR(",\"" D_JSON_CHAN "\":%d"), lorae32_cfg->CHAN);
   
-  ResponseAppend_P(PSTR(",\"" D_JSON_uartParity "\":%d"), lora_cfg->SPED.uartParity);
-  ResponseAppend_P(PSTR(",\"" D_JSON_uartBaudRate "\":%d"), lora_cfg->SPED.uartBaudRate);
-  ResponseAppend_P(PSTR(",\"" D_JSON_airDataRate "\":%d"), lora_cfg->SPED.airDataRate);
+  ResponseAppend_P(PSTR(",\"" D_JSON_uartParity "\":%d"), lorae32_cfg->SPED.uartParity);
+  ResponseAppend_P(PSTR(",\"" D_JSON_uartBaudRate "\":%d"), lorae32_cfg->SPED.uartBaudRate);
+  ResponseAppend_P(PSTR(",\"" D_JSON_airDataRate "\":%d"), lorae32_cfg->SPED.airDataRate);
 
-  ResponseAppend_P(PSTR(",\"" D_JSON_fixedTransmission "\":%d"), lora_cfg->OPTION.fixedTransmission);
-  ResponseAppend_P(PSTR(",\"" D_JSON_ioDriveMode "\":%d"), lora_cfg->OPTION.ioDriveMode);
-  ResponseAppend_P(PSTR(",\"" D_JSON_wirelessWakeupTime "\":%d"), lora_cfg->OPTION.wirelessWakeupTime);
-  ResponseAppend_P(PSTR(",\"" D_JSON_fec "\":%d"), lora_cfg->OPTION.fec);
-  ResponseAppend_P(PSTR(",\"" D_JSON_transmissionPower "\":%d"), lora_cfg->OPTION.transmissionPower);
+  ResponseAppend_P(PSTR(",\"" D_JSON_fixedTransmission "\":%d"), lorae32_cfg->OPTION.fixedTransmission);
+  ResponseAppend_P(PSTR(",\"" D_JSON_ioDriveMode "\":%d"), lorae32_cfg->OPTION.ioDriveMode);
+  ResponseAppend_P(PSTR(",\"" D_JSON_wirelessWakeupTime "\":%d"), lorae32_cfg->OPTION.wirelessWakeupTime);
+  ResponseAppend_P(PSTR(",\"" D_JSON_fec "\":%d"), lorae32_cfg->OPTION.fec);
+  ResponseAppend_P(PSTR(",\"" D_JSON_transmissionPower "\":%d"), lorae32_cfg->OPTION.transmissionPower);
 }
 void LoraE32Json2Config(JsonParserObject root) {
-  lora_cfg->ADDH = root.getUInt(PSTR(D_JSON_ADDH), lora_cfg->ADDH);
-  lora_cfg->ADDL = root.getUInt(PSTR(D_JSON_ADDL), lora_cfg->ADDL);
-  lora_cfg->CHAN  = root.getUInt(PSTR(D_JSON_CHAN), lora_cfg->CHAN );
-  lora_cfg->SPED.uartParity  = root.getUInt(PSTR(D_JSON_uartParity), lora_cfg->SPED.uartParity );
-  lora_cfg->SPED.uartBaudRate  = root.getUInt(PSTR(D_JSON_uartBaudRate), lora_cfg->SPED.uartBaudRate );
-  lora_cfg->SPED.airDataRate  = root.getUInt(PSTR(D_JSON_airDataRate), lora_cfg->SPED.airDataRate );
-  lora_cfg->OPTION.fixedTransmission  = root.getUInt(PSTR(D_JSON_fixedTransmission), lora_cfg->OPTION.fixedTransmission );
-  lora_cfg->OPTION.ioDriveMode  = root.getUInt(PSTR(D_JSON_ioDriveMode), lora_cfg->OPTION.ioDriveMode );
-  lora_cfg->OPTION.wirelessWakeupTime  = root.getUInt(PSTR(D_JSON_wirelessWakeupTime), lora_cfg->OPTION.wirelessWakeupTime );
-  lora_cfg->OPTION.fec  = root.getUInt(PSTR(D_JSON_fec), lora_cfg->OPTION.fec );
-  lora_cfg->OPTION.transmissionPower  = root.getUInt(PSTR(D_JSON_transmissionPower), lora_cfg->OPTION.transmissionPower );
+  lorae32_cfg->ADDH = root.getUInt(PSTR(D_JSON_ADDH), lorae32_cfg->ADDH);
+  lorae32_cfg->ADDL = root.getUInt(PSTR(D_JSON_ADDL), lorae32_cfg->ADDL);
+  lorae32_cfg->CHAN  = root.getUInt(PSTR(D_JSON_CHAN), lorae32_cfg->CHAN );
+  lorae32_cfg->SPED.uartParity  = root.getUInt(PSTR(D_JSON_uartParity), lorae32_cfg->SPED.uartParity );
+  lorae32_cfg->SPED.uartBaudRate  = root.getUInt(PSTR(D_JSON_uartBaudRate), lorae32_cfg->SPED.uartBaudRate );
+  lorae32_cfg->SPED.airDataRate  = root.getUInt(PSTR(D_JSON_airDataRate), lorae32_cfg->SPED.airDataRate );
+  lorae32_cfg->OPTION.fixedTransmission  = root.getUInt(PSTR(D_JSON_fixedTransmission), lorae32_cfg->OPTION.fixedTransmission );
+  lorae32_cfg->OPTION.ioDriveMode  = root.getUInt(PSTR(D_JSON_ioDriveMode), lorae32_cfg->OPTION.ioDriveMode );
+  lorae32_cfg->OPTION.wirelessWakeupTime  = root.getUInt(PSTR(D_JSON_wirelessWakeupTime), lorae32_cfg->OPTION.wirelessWakeupTime );
+  lorae32_cfg->OPTION.fec  = root.getUInt(PSTR(D_JSON_fec), lorae32_cfg->OPTION.fec );
+  lorae32_cfg->OPTION.transmissionPower  = root.getUInt(PSTR(D_JSON_transmissionPower), lorae32_cfg->OPTION.transmissionPower );
 }
 
 void LoraE32Init() {
@@ -101,16 +101,16 @@ if (PinUsed(GPIO_LORA_E32_M0) && PinUsed(GPIO_LORA_E32_M1)){
   digitalWrite(Pin(GPIO_LORA_E32_RX), HIGH);
   sleep(1);
 #endif // CONFIG_IDF_TARGET_ESP32S3
-  LoraSerial = new HardwareSerial(1); // HARD assigned UART1
-  // Lora = new LoRa_E32(Pin(GPIO_LORA_E32_TX), Pin(GPIO_LORA_E32_RX), LoraSerial, UART_BPS_RATE_9600, SERIAL_8N1);
-  Lora = new LoRa_E32(lora_tx, lora_rx, LoraSerial, lora_aux, lora_m0, lora_m1, UART_BPS_RATE_9600, SERIAL_8N1);
-  lora_cfg = new Configuration();
-  if(!Lora || !lora_cfg) {
-    AddLog(LOG_LEVEL_INFO, PSTR("LOR: LoRa E32 Initialized failed"));
+  LoraE32Serial = new HardwareSerial(1); // HARD assigned UART1
+  // Lora = new LoRa_E32(Pin(GPIO_LORA_E32_TX), Pin(GPIO_LORA_E32_RX), LoraE32Serial, UART_BPS_RATE_9600, SERIAL_8N1);
+  LoraE32 = new LoRa_E32(lora_tx, lora_rx, LoraE32Serial, lora_aux, lora_m0, lora_m1, UART_BPS_RATE_9600, SERIAL_8N1);
+  lorae32_cfg = new Configuration();
+  if(!LoraE32 || !lorae32_cfg) {
+    AddLog(LOG_LEVEL_INFO, PSTR("LOR: LoraE32 E32 Initialized failed"));
     return;
   }
-  if(Lora->begin()) {
-    AddLog(LOG_LEVEL_INFO, PSTR("LOR: LoRa E32 Initialized successfully aux:%u tx:%u rx:%u m0:%u m1:%u"),lora_aux,lora_tx,lora_rx, lora_m0, lora_m1);
+  if(LoraE32->begin()) {
+    AddLog(LOG_LEVEL_INFO, PSTR("LOR: LoRa E32 Initialized successfully aux:%d tx:%d rx:%d m0:%d m1:%d"),lora_aux,lora_tx,lora_rx, lora_m0, lora_m1);
   }else {
     AddLog(LOG_LEVEL_INFO, PSTR("LOR: LoRa E32 Initialized failed"));
     return;
@@ -191,30 +191,30 @@ void LoraE32DataHander(String data) {
 }
 
 void LoraE32Processing() {
-  int data_len = Lora->available();
+  int data_len = LoraE32->available();
   if (data_len <= 0) return;
   AddLog(LOG_LEVEL_INFO, PSTR("LOR: Receiving..."));
-  lora_busy = true;
-  ResponseContainer rc = Lora->receiveMessageUntil('\n');
-  lora_busy = false;
+  lorae32_busy = true;
+  ResponseContainer rc = LoraE32->receiveMessageUntil('\n');
+  lorae32_busy = false;
   if(rc.status.code != E32_SUCCESS) return;
   AddLog(LOG_LEVEL_INFO, PSTR("LOR: Rcvd (%d): %s"), rc.data.length(), rc.data.c_str());
   LoraE32DataHander(rc.data);
 }
 
 void LoraE32SendData() {
-  if (lora_buf[0] == '\0') return;
-  if (lora_busy) return;
+  if (lorae32_buf[0] == '\0') return;
+  if (lorae32_busy) return;
 
-  lora_busy = true;
-  ResponseStatus rs = Lora->sendMessage(lora_buf);
-  lora_busy = false;
+  lorae32_busy = true;
+  ResponseStatus rs = LoraE32->sendMessage(lorae32_buf);
+  lorae32_busy = false;
 
-  lora_buf[0] = '\0';
+  lorae32_buf[0] = '\0';
 }
 
 void LoraE32SendSensors() {
-  if (!lora_send_sensors) return;
+  if (!lorae32_send_sensors) return;
   String sensors_data = "{";
   ResponseClear();
   XsnsCall(FUNC_JSON_APPEND);
@@ -282,9 +282,9 @@ void LoraE32SendSensors() {
     return;
   }
   AddLog(LOG_LEVEL_INFO, PSTR("LOR: Send sensors data = %s"), newPayload.c_str());
-  strlcpy(lora_buf, newPayload.c_str(), sizeof(lora_buf));
+  strlcpy(lorae32_buf, newPayload.c_str(), sizeof(lorae32_buf));
 // #else 
-  // strlcpy(lora_buf, sensors_data.c_str(), sizeof(lora_buf));
+  // strlcpy(lorae32_buf, sensors_data.c_str(), sizeof(lorae32_buf));
 // #endif //USE_MQTT_TB_IOT
   LoraE32SendData();
 }
@@ -296,7 +296,7 @@ bool LoraE32GatewayHandleMqttData() {
   String payloadStr = XdrvMailbox.data;
   if (topicStr == "v1/gateway/rpc"){
     AddLog(LOG_LEVEL_INFO, PSTR("LOR: Foward rpc: %s"), payloadStr.c_str());
-    strlcpy(lora_buf, payloadStr.c_str(), sizeof(lora_buf));
+    strlcpy(lorae32_buf, payloadStr.c_str(), sizeof(lorae32_buf));
     LoraE32SendData();
   }
   return true;  
@@ -309,24 +309,23 @@ void LoraE32GatewayInit(){
  * Commands
 \*********************************************************************************************/
 const char kLoRaE32Commands[] PROGMEM = "|" // No Prefix
-                                             "LoraGet|"
-                                             "LoraSend|"
-                                             "LoraSendSensors|"
-                                             "LoraConfig|"
-                                             "loratest";
+                                             "LoraE32Get|"
+                                             "LoraE32Send|"
+                                             "LoraE32SendSensors|"
+                                             "LoraE32Config";
 void (*const LoRaE32Command[])(void) PROGMEM = {
-  &CmndLoraGet, &CmndLoraSend,&CmndLoraSendSensors, &CmndLoraConfig, &loratest
+  &CmndLoraE32Get, &CmndLoraE32Send,&CmndLoraE32SendSensors, &CmndLoraE32Config
 };
 
-void CmndLoraGet(void) {
+void CmndLoraE32Get(void) {
   Configuration configuration;
   ModuleInformation moduleInformation;
   ResponseStructContainer rc;
-  rc = Lora->getConfiguration();
+  rc = LoraE32->getConfiguration();
   if(!rc.data) return;
   memcpy(&configuration, rc.data, sizeof(Configuration));
   rc.close();
-  rc = Lora->getModuleInformation();
+  rc = LoraE32->getModuleInformation();
   if(!rc.data) return;
   memcpy(&moduleInformation, rc.data, sizeof(ModuleInformation));
   rc.close();
@@ -365,7 +364,7 @@ void CmndLoraGet(void) {
   ResponseCmndDone();
 }
 
-void CmndLoraConfig(void) {
+void CmndLoraE32Config(void) {
   // LoRaConfig                                       - Show all parameters
   // LoRaConfig 1                                     - Set default parameters
   // LoRaConfig {"ADDH":0,"ADDL":1}                   - Enter byte parameters
@@ -378,7 +377,7 @@ void CmndLoraConfig(void) {
       JsonParserObject root = parser.getRootObject();
       if (root) { 
         LoraE32Json2Config(root);
-        Lora->setConfiguration(*lora_cfg, WRITE_CFG_PWR_DWN_SAVE);
+        LoraE32->setConfiguration(*lorae32_cfg, WRITE_CFG_PWR_DWN_SAVE);
       }
     }
   }
@@ -388,7 +387,7 @@ void CmndLoraConfig(void) {
   ResponseAppend_P(PSTR("}}"));
 }
 
-void CmndLoraSend(void) {
+void CmndLoraE32Send(void) {
   // LoRaSend "Hello Tiger"     - Send "Hello Tiger\n"
   // LoRaSend                   - Set to text decoding
   // LoRaSend1 "Hello Tiger"    - Send "Hello Tiger\n"
@@ -400,26 +399,26 @@ void CmndLoraSend(void) {
     return;
   }
 
-  memset(lora_buf, 0, LORA_BUF_SIZE);
+  memset(lorae32_buf, 0, LORA_BUF_SIZE);
   uint32_t len = XdrvMailbox.data_len;
   const char *src = XdrvMailbox.data;
   AddLog(LOG_LEVEL_INFO, PSTR("LOR: Send (%d)"), len);
   switch (XdrvMailbox.index) {
     case 0:  // LoRaSend "abc" => "abc\n"
     case 1:
-      len = snprintf(lora_buf, LORA_BUF_SIZE, "%s\n", src);
+      len = snprintf(lorae32_buf, LORA_BUF_SIZE, "%s\n", src);
       break;
 
     case 2:
-      strlcpy(lora_buf, src, LORA_BUF_SIZE);
-      len = strlen(lora_buf);
+      strlcpy(lorae32_buf, src, LORA_BUF_SIZE);
+      len = strlen(lorae32_buf);
       break;
 
     case 3:
-      strlcpy(lora_buf, src, LORA_BUF_SIZE - 2);
-      len = strlen(lora_buf);
-      lora_buf[len++] = '\f';
-      lora_buf[len] = '\0';
+      strlcpy(lorae32_buf, src, LORA_BUF_SIZE - 2);
+      len = strlen(lorae32_buf);
+      lorae32_buf[len++] = '\f';
+      lorae32_buf[len] = '\0';
       break;
   }
 
@@ -427,23 +426,19 @@ void CmndLoraSend(void) {
   ResponseCmndDone();
 }
 
-void CmndLoraSendSensors(void) {
+void CmndLoraE32SendSensors(void) {
   // LoRaConfig 1                                      - Send all sensor data
   if (XdrvMailbox.data_len > 0) {
     if (XdrvMailbox.payload == 1) {
-      lora_send_sensors = true;
+      lorae32_send_sensors = true;
     }
     else {
-      lora_send_sensors = false;
+      lorae32_send_sensors = false;
     }
   }
   ResponseCmndDone();
 }
 
-void loratest(){
-  MqttPublishPayload("v1/gateway/attributes","{\"T\":{\"a\":1}}");
-  ResponseCmndDone();
-}
 /*********************************************************************************************\
  * Interface
 \*********************************************************************************************/
@@ -454,7 +449,7 @@ bool Xdrv104(uint32_t function) {
   if (FUNC_INIT == function) {
     LoraE32Init();
   }
-  else if (Lora) {
+  else if (LoraE32) {
     switch (function) {
       case FUNC_LOOP:
       case FUNC_SLEEP_LOOP:
