@@ -20,9 +20,8 @@
 #include <Arduino.h>
 #include "ArduinoJson.h" 
 /****************************************************************************************** */
-#define LED_Pin 10
-uint32_t M0_Pin;
-uint32_t M1_Pin;
+uint32_t M0_Pin = -1;
+uint32_t M1_Pin = -1;
 uint32_t AUX_Pin = -1;
 /*********************************************************************************************\
 * LoraE32 command
@@ -75,11 +74,6 @@ void CmdSendLora(void){
     char* data = XdrvMailbox.data;
     int len = XdrvMailbox.data_len;
     AddLog(LOG_LEVEL_INFO, PSTR("Lora Transmit : %s"), data);
-
-    //  Set M0, M1 LOW để vào Normal mode trước khi gửi
-    digitalWrite(M0_Pin, LOW);
-    digitalWrite(M1_Pin, LOW);
-
     ResponseStatus rs = my_lora_e32->sendMessage(data, len);
     AddLog(LOG_LEVEL_INFO, rs.getResponseDescription().c_str());
     ResponseCmndDone();
@@ -108,11 +102,6 @@ void CmdBeginLora(void){
     ResponseCmndDone();
   }
   else{
-
-    //  Set M0, M1 HIGH để vào chế độ cấu hình
-    digitalWrite(M0_Pin, HIGH);
-    digitalWrite(M1_Pin, HIGH);
-
     if(doc.containsKey("channel") && doc.containsKey("addrHigh") && doc.containsKey("addrLow")){
       uint8_t Baudrate = 3;
       uint8_t fixedTransmission = 0;
@@ -138,12 +127,7 @@ void CmdSendLoraTelemetry(void)
         AddLog(LOG_LEVEL_INFO, PSTR("No data to transmit"));
         ResponseCmndDone();
         return;
-    }
-
-    //  Set M0, M1 LOW để vào chế độ gửi
-    digitalWrite(M0_Pin, LOW);
-    digitalWrite(M1_Pin, LOW);
-
+    }   
     StaticJsonDocument<256> doc;
     JsonArray arr = doc.createNestedArray(String(device_info.device_name));
     JsonObject data = arr.createNestedObject();
@@ -167,10 +151,6 @@ void CmdSendLoraTelemetry(void)
 }
 
 void CmdSendLoraAttribute(void){
-    //  Set M0, M1 LOW để vào chế độ gửi
-    digitalWrite(M0_Pin, LOW);
-    digitalWrite(M1_Pin, LOW);
-
     StaticJsonDocument<58> doc;
     JsonObject deviceA = doc.createNestedObject(device_info.device_name);
 
@@ -254,19 +234,23 @@ bool initSuccess = false;
 void LoraE32Init()
 {
   // Gọi hàm khởi tạo từ my_lora_e32->h
-  if (!PinUsed(GPIO_LORA_E32_RX) || !PinUsed(GPIO_LORA_E32_TX) || !PinUsed(GPIO_LORA_E32_M0) || !PinUsed(GPIO_LORA_E32_M1)) return;
+  if (!PinUsed(GPIO_LORA_E32_RX) || !PinUsed(GPIO_LORA_E32_TX) ) return;
   initSuccess = true;
-  String mac_str = WiFi.macAddress(); // "AB:CD:EF:GH:JK:LM"
-  int first = mac_str.lastIndexOf(":",mac_str.lastIndexOf(":",mac_str.lastIndexOf(":"))); // At :GH...
-  String mac_device = mac_str.substring(first+1); //"GT:JK:LM"
-  mac_device.replace(":",""); // Delete :GTJKLM
+  String mac_str = TasmotaGlobal.mqtt_client; // 		DVES_18E8AC
+  // mac_str = WiFi.macAddress(); // "AB:CD:EF:GH:JK:LM"
+  int first = mac_str.lastIndexOf("_"); // At _18....
+  String mac_device = mac_str.substring(first+1); //"18E8AC"
   device_info.setLoraName(mac_device);
-  M0_Pin = Pin(GPIO_LORA_E32_M0);
-  M1_Pin = Pin(GPIO_LORA_E32_M1);
-  pinMode(M0_Pin,OUTPUT);
-  pinMode(M1_Pin,OUTPUT);
-  digitalWrite(M0_Pin,LOW);
-  digitalWrite(M1_Pin,LOW);
+  M0_Pin = -1;
+  M1_Pin = -1;
+  if(!PinUsed(GPIO_LORA_E32_M0) || !PinUsed(GPIO_LORA_E32_M1)){
+    M0_Pin = Pin(GPIO_LORA_E32_M0);
+    M1_Pin = Pin(GPIO_LORA_E32_M1);
+  }
+  if(M0_Pin!=-1&&M1_Pin!=-1){
+    pinMode(M0_Pin,OUTPUT);
+    pinMode(M1_Pin,OUTPUT);
+  }
   if(PinUsed(GPIO_LORA_E32_AUX)){
     AUX_Pin =  Pin(GPIO_LORA_E32_AUX);
   }
@@ -283,7 +267,6 @@ void LoraE32Init()
   my_lora_e32->begin();
   configMyLoraE32(20, 0x01, 0x02, 3);
   ResponseStructContainer c = my_lora_e32->getConfiguration();
-  pinMode(LED_Pin,OUTPUT); // Pin for RPC
   if (c.data == NULL)
   {
     AddLog(LOG_LEVEL_INFO, PSTR("Config NULL"));
@@ -304,8 +287,8 @@ void LoraE32Init()
 // Xử lý gửi/nhận dữ liệu
 void LoraE32Processing()
 {
-  // digitalWrite(M0_Pin,LOW);
-  // digitalWrite(M1_Pin,LOW);
+  //
+  //
   if (!initSuccess)
     return;
 
@@ -355,13 +338,8 @@ void LORA_E32_COLLECT_DATA() {
   for (JsonPair p : input_doc.as<JsonObject>()) {
       data[p.key()] = p.value();
   }
-
   String final_payload;
   serializeJson(out_doc, final_payload);
-
-  digitalWrite(M0_Pin, LOW);
-  digitalWrite(M1_Pin, LOW);
-
   ResponseStatus rs = my_lora_e32->sendMessage(final_payload.c_str(), final_payload.length());
   AddLog(LOG_LEVEL_INFO, PSTR("LoRa Send: %s | Payload: %s"), rs.getResponseDescription().c_str(), final_payload.c_str());
 }
@@ -401,7 +379,10 @@ void processRpcCommand(const char* jsonMessage,int len){
   AddLog(LOG_LEVEL_INFO,PSTR("RPC ID: %d"),request_id);
   if(strcmp(method,"POWER1") == 0){
       AddLog(LOG_LEVEL_INFO,PSTR("Set Led to %d"),params);
-      digitalWrite(LED_Pin,params);
+      AddLog(LOG_LEVEL_INFO,PSTR("Set Led to %d"),params);
+      char fullCommand[64];
+      snprintf(fullCommand, sizeof(fullCommand), "%s %s", method, params);
+      ExecuteCommand(fullCommand,SRC_SERIAL);
       my_lora_e32->sendMessage(jsonMessage,len);
   }
   // else if(){
