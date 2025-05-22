@@ -42,23 +42,23 @@ bool RS485_Driver::IsBegin() {
 /**
  * Đọc thanh ghi từ thiết bị RS485.
  * @param device_addr Địa chỉ thiết bị.
- * @param startAddress Địa chỉ bắt đầu đọc.
+ * @param startRegAddress Địa chỉ bắt đầu đọc.
  * @param count Số lượng thanh ghi cần đọc.
  * @return Mã trạng thái trả về từ thiết bị (0 nếu OK).
  */
-uint8_t RS485_Driver::ReadRegister(uint8_t device_addr, uint16_t startAddress, uint16_t count) {
-    return this->rs485ModBus->Send(device_addr, MODBUS_FUNC_READ_HOLDING_REG, startAddress, count);
+uint8_t RS485_Driver::ReadRegister(uint8_t device_addr, uint16_t startRegAddress, uint16_t count) {
+    return this->rs485ModBus->Send(device_addr, MODBUS_FUNC_READ_HOLDING_REG, startRegAddress, count);
 }
 
 /**
  * Ghi dữ liệu vào thanh ghi của thiết bị RS485.
  * @param device_addr Địa chỉ thiết bị.
- * @param startAddress Địa chỉ bắt đầu ghi.
+ * @param startRegAddress Địa chỉ bắt đầu ghi.
  * @param num Số lượng thanh ghi cần ghi.
  * @param write_data Mảng dữ liệu cần ghi.
  */
-void RS485_Driver::WriteRegister(uint8_t device_addr, uint16_t startAddress, int num, uint16_t* write_data) {
-    this->rs485ModBus->Send(device_addr, MODBUS_FUNC_WRITE_SINGLE_REG, startAddress, num, write_data);
+void RS485_Driver::WriteRegister(uint8_t device_addr, uint16_t startRegAddress, int num, uint16_t* write_data) {
+    this->rs485ModBus->Send(device_addr, MODBUS_FUNC_WRITE_SINGLE_REG, startRegAddress, num, write_data);
 }
 
 /**

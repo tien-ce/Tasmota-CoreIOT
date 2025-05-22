@@ -5,6 +5,7 @@
 #define XSNS_120 120
 #include "RS485_driver.h"
 // ==== Real-time content values (Read-only) ====
+#define REG_ADDR_NITROGEN_CONTENT            0x001E  // 40031: Nitrogen content (read-only)
 #define REG_ADDR_PHOSPHORUS_CONTENT          0x001F  // 40032: Phosphorus content (read-only)
 #define REG_ADDR_POTASSIUM_CONTENT           0x0020  // 40033: Potassium content (read-only)
 
@@ -53,6 +54,8 @@
  * - Checksum: CRC16, Low byte first, then High byte.
  *******************************************************/
 class RS485_NPK : public RS485_t{
+    private:
+        int16_t payload[3];
     public:
         RS485_NPK() {
             this->nameSensor = "NPK Sensor";
@@ -64,21 +67,65 @@ class RS485_NPK : public RS485_t{
             detectedSensors.DetectSensor(this->startAddress,this->endAddress,REG_ADDR_DEVICE_ADDRESS);
             std::vector<uint16_t> listDetected = detectedSensors.GetSensorList();
             this->isDetected = false;
+        #ifdef USE_DEBUG
+            if(listDetected.empty()){
+                AddLog(LOG_LEVEL_INFO,PSTR("List Detected is empty"));
+            }
+        #endif
             for(uint16_t it : listDetected){
+                AddLog(LOG_LEVEL_INFO,PSTR("[DEBUG] it : %04X"), it);
                 if(it >= this->startAddress && it <= this->endAddress){
                     this->address = it;
                     this->isDetected = true;
+                    AddLog(LOG_LEVEL_INFO,PSTR("[DEBUG] NPK Sensor is detected"));
                     break;
                 }
             }
             return this->isDetected;
         }
-        void readPayload() override{
 
+        void readPayload(bool *success) override{
+            uint8_t err = rs485.ReadRegister(this->address,REG_ADDR_NITROGEN_CONTENT,0x0003);
+            if(err){
+#ifdef USE_DEBUG
+                AddLog(LOG_LEVEL_ERROR, PSTR("[DEBUG] READ NPK err : %d"),err);
+#endif
+                *(success) = false;
+                return;
+            }
+            else{
+                delay(200);
+                uint8_t respone[12]; // Nitro : 16 bit , Kali : 16 bit , PhotPho 16 bit
+                err = rs485.ReceiveRespone(respone,11);
+                if(err){
+#ifdef USE_DEBUG
+                    AddLog(LOG_LEVEL_ERROR,PSTR("[DEBUG] RECEIVE NPK err : %d"),err);
+#endif
+                    *(success) = false;
+                    return;
+                }
+                else{
+                    // Bỏ qua 3 byte đầu (addr, func, byte count), lấy data từ index 3 trở đi
+                    uint16_t nitrogen   = ((uint16_t)respone[3] << 8) | respone[4];// 0x10 0x20 , nitro = ( 0x0010 << 8 | 0x20) -> ( 0x1000 | 0x20 ) -> 0x1020
+                    uint16_t phosphorus = ((uint16_t)respone[5] << 8) | respone[6];
+                    uint16_t potassium  = ((uint16_t)respone[7] << 8) | respone[8];
+                    this->payload[0] = nitrogen;
+                    this->payload[1] = phosphorus;
+                    this->payload[2] = potassium;
+                    *(success) = true;
+                }
+            }
         }
-        JsonObject getPayLoad() override{
-            return {};
+
+        void setFalsePayload(){
+            this->payload[0] = -1;
+            this->payload[1] = -1;
+            this->payload[2] = -1;
         }
+        int16_t* getPayload() {
+            return this->payload;
+        }
+
         void changeAddress(uint16_t newAddress) override{
 
         }
@@ -86,36 +133,82 @@ class RS485_NPK : public RS485_t{
             return this->listKey;
         }       
 };
+/***************** INIT *************** */
 RS485_NPK  rs485NPK;
 bool isInit = false;
 void NPKInit(void){
     isInit = rs485NPK.init();
+    if(isInit){
+        AddLog(LOG_LEVEL_INFO,PSTR("NPK sensor is Init"));
+    }
+    else{
+        AddLog(LOG_LEVEL_ERROR,PSTR("NPK sensor not Init"));
+    }
 }
+
+/******************* READ Payload************** */
+void NPKreadPayload(void){
+    bool success = false;
+    rs485NPK.readPayload(&success);
+    if(success){
+        AddLog(LOG_LEVEL_INFO, PSTR("[DEBUG] ReadNPK sucess"));
+    }
+    else{
+        rs485NPK.setFalsePayload();
+        AddLog(LOG_LEVEL_ERROR,PSTR("[DEBUG] ReadNPK Failed"));
+    }
+}
+/************************ SHOW ******************** */
+const char HTTP_SNS_SM_NITRO[]        PROGMEM = "{s} Nitrogen {m} %d mg/kg";
+const char HTTP_SNS_SM_PHOSPHORUS[]  PROGMEM = "{s} Phosphorus {m} %d mg/kg";
+const char HTTP_SNS_SM_POTASSIUM[]   PROGMEM = "{s} Kali {m} %d mg/kg";
+#define D_JSON_SOIL_NITROGEN     "Nitrogen"
+#define D_JSON_SOIL_PHOSPHORUS   "Phosphorus"
+#define D_JSON_SOIL_POTASSIUM    "Kali"
+void NPKShow(bool json){
+    bool sucess = false;
+    int16_t* payload = rs485NPK.getPayload();
+    if (json) {
+        ResponseAppend_P(PSTR(",\"%s\":{"), "NPK_Sensor");  // hoặc dùng biến tên nếu có
+        ResponseAppend_P(PSTR("\"" D_JSON_SOIL_NITROGEN "\":%d,"), payload[0]);
+        ResponseAppend_P(PSTR("\"" D_JSON_SOIL_PHOSPHORUS "\":%d,"), payload[1]);
+        ResponseAppend_P(PSTR("\"" D_JSON_SOIL_POTASSIUM "\":%d"), payload[2]);
+        ResponseJsonEnd();
+        
+    }
+#ifdef USE_WEBSERVER
+    else
+    {
+        WSContentSend_PD(HTTP_SNS_SM_NITRO, payload[0]);
+        WSContentSend_PD(HTTP_SNS_SM_PHOSPHORUS, payload[1]);
+        WSContentSend_PD(HTTP_SNS_SM_POTASSIUM, payload[2]);
+    }
+#endif
+}
+
+/*************************************************** */
 bool Xsns120(uint32_t function)
 {
     bool result = false;
     if (FUNC_INIT == function)
     {
-        bool isInit = rs485NPK.init();
+        NPKInit();
     }
     else if (isInit)
     {
         switch (function)
         {
-            case FUNC_EVERY_SECOND:
-                AddLog(LOG_LEVEL_INFO,PSTR("DETECTED NPK SENSOR"));
-                break;
-//        case FUNC_EVERY_250_MSECOND:
-//             NPKReadData();
-//             break;
-//         case FUNC_JSON_APPEND:
-//             NPKShow(1);
-//             break;
-// #ifdef USE_WEBSERVER
-//         case FUNC_WEB_SENSOR:
-//             NPKShow(0);
-//             break;
-// #endif
+       case FUNC_EVERY_SECOND:
+            NPKreadPayload();
+            break;
+        case FUNC_JSON_APPEND:
+            NPKShow(1);
+            break;
+#ifdef USE_WEBSERVER
+        case FUNC_WEB_SENSOR:
+            NPKShow(0);
+            break;
+#endif
         }
     }
     return result;

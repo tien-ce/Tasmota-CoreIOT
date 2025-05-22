@@ -35,12 +35,12 @@ struct UART {
  *      @return true nếu đã sẵn sàng, false nếu chưa.
  * - ReadRegister(uint8_t, uint16_t, uint16_t)              : Đọc giá trị từ thanh ghi Modbus.
  *      @param device_addr Địa chỉ thiết bị.
- *      @param startAddress Địa chỉ bắt đầu.
+ *      @param startRegAddress Địa chỉ bắt đầu.
  *      @param count Số lượng thanh ghi cần đọc.
  *      @return Mã trạng thái trả về từ thiết bị (0 nếu OK).
  * - WriteRegister(uint8_t, uint16_t, int, uint16_t*)       : Ghi dữ liệu vào thanh ghi thiết bị.
  *      @param device_addr Địa chỉ thiết bị.
- *      @param startAddress Địa chỉ bắt đầu ghi.
+ *      @param startRegAddress Địa chỉ bắt đầu ghi.
  *      @param num Số lượng thanh ghi cần ghi.
  *      @param write_data Mảng dữ liệu cần ghi.
  * - ReceiveRespone(uint8_t* buffer, int lenght)            : Nhận phản hồi từ thiết bị.
@@ -64,8 +64,8 @@ public:
 
     void begin(UART* uart);
     bool IsBegin();
-    uint8_t ReadRegister(uint8_t device_addr, uint16_t startAddress, uint16_t count);
-    void WriteRegister(uint8_t device_addr, uint16_t startAddress, int num, uint16_t* write_data);
+    uint8_t ReadRegister(uint8_t device_addr, uint16_t startRegAddress, uint16_t count);
+    void WriteRegister(uint8_t device_addr, uint16_t startRegAddress, int num, uint16_t* write_data);
     uint8_t ReceiveRespone(uint8_t* buffer, int lenght);
     uint8_t ReceivePayload(uint8_t* receive_payload, int len);
 };
@@ -88,7 +88,7 @@ extern RS485_Driver rs485;
  *      @return Vector chứa địa chỉ cảm biến.
  * - PrintListSensor()                                        : Ghi log danh sách cảm biến đã tìm thấy.
  * - DetectSensor(uint16_t, uint16_t, uint16_t RegisterAddr)  : Quét bus để phát hiện cảm biến.
- *      @param startAddress Địa chỉ bắt đầu quét.
+ *      @param startRegAddress Địa chỉ bắt đầu quét.
  *      @param endAddress Địa chỉ kết thúc quét.
  *      @param RegisterAddr Địa chỉ thanh ghi chứa địa chỉ thiết bị để xác minh.
  */
@@ -116,8 +116,8 @@ extern DetectedSensors detectedSensors;
  * - nameSensor    : Tên loại cảm biến.
  * - address       : Địa chỉ thiết bị RS485.
  * - listKey       : Danh sách các khóa dữ liệu (các giá trị cảm biến).
- * - startAddress  : Địa chỉ thanh ghi bắt đầu.
- * - endAddress    : Địa chỉ thanh ghi kết thúc.
+ * - startAddress  : Địa chỉ nhỏ nhất có thể của cảm biến.
+ * - endAddress    : Địa chỉ lớn nhất có thể của cảm biến.
  * - isDetected    : Cờ kiểm tra thiết bị đã được phát hiện hay chưa.
  * 
  * Phương thức:
@@ -137,21 +137,15 @@ protected:
     uint16_t startAddress;
     uint16_t endAddress;
     bool isDetected;
-
 public:
     RS485_t(){
 
     }
     
     virtual bool init() = 0;
-
-    virtual void readPayload() = 0;
-
-    /**
-     * @return Đối tượng JsonObject chứa dữ liệu đo được.
-     */
-    virtual JsonObject getPayLoad() = 0;
-
+    
+    virtual void readPayload(bool *success) = 0;
+    
     /**
      * @param newAddress Địa chỉ mới cần gán cho thiết bị RS485.
      */

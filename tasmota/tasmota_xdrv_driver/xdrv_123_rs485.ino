@@ -8,19 +8,6 @@
 #include "RS485_driver.h"
 #define MAX_SENSORS 100
 /********************   Detected Sensor ************************** */
-void DetectedSensors::PrintListSensor() {
-    if (this->addressDetecedList.empty()) {
-        AddLog(LOG_LEVEL_INFO, PSTR("No address detected"));
-        return;
-    }
-    for (uint16_t it : this->addressDetecedList) {
-        AddLog(LOG_LEVEL_INFO, PSTR("Detected Sensor List: 0x%04X"), it);
-    }
-}
-
-/**
- * Tìm kiếm và phát hiện cảm biến trên dải địa chỉ chỉ định.
- */
 void DetectedSensors::DetectSensor(uint16_t startAddress, uint16_t endAddress, uint16_t RegisterAddr) {
     for (uint16_t i = startAddress; i <= endAddress; i++) {
         uint8_t result = rs485.ReadRegister(i, RegisterAddr, 0x0001);
@@ -28,6 +15,7 @@ void DetectedSensors::DetectSensor(uint16_t startAddress, uint16_t endAddress, u
         if (result == 0) {
             uint8_t buffer[8];
             uint8_t err = rs485.ReceiveRespone(buffer, 7);
+#ifdef USE_DEBUG
             if (err) {
                 AddLog(LOG_LEVEL_INFO, PSTR("[DEBUG] err: %d at 0x%04X"), err, i);
             } else {
@@ -35,18 +23,27 @@ void DetectedSensors::DetectSensor(uint16_t startAddress, uint16_t endAddress, u
                 for (int j = 0; j < 7; j++) {
                     snprintf(&hexString[j * 5], 6, "0x%02X ", buffer[j]);
                 }
-                AddLog(LOG_LEVEL_INFO, PSTR("Raw Payload: %s"), hexString);
+                AddLog(LOG_LEVEL_INFO, PSTR("[DEBUG] Raw Payload: %s"), hexString);
             }
-
+#endif
             uint16_t addr = (buffer[3] << 8) | buffer[4];
             if (addr == i) {
-                AddLog(LOG_LEVEL_INFO, PSTR("Detected Address: 0x%04X"), i);
+#ifdef USE_DEBUG
+                AddLog(LOG_LEVEL_INFO, PSTR("[DEBUG] Detected Address: 0x%04X"), i);
+#endif
                 this->addressDetecedList.push_back(i);
                 return;
             }
         }
     }
 }
+void DetectedSensors::PrintListSensor() {
+    // Ví dụ: in ra danh sách địa chỉ đã phát hiện
+    for (uint16_t addr : this->addressDetecedList) {
+        AddLog(LOG_LEVEL_INFO, PSTR("Detected Address: 0x%04X"), addr);
+    }
+}
+
 
 /*************************************************************************************** */
 void Rs485Init(void){
@@ -73,9 +70,9 @@ bool Xdrv123(uint32_t function)
     {
         switch (function)
         {
-            case FUNC_EVERY_SECOND:
-                detectedSensors.PrintListSensor();
-                break;
+            // case FUNC_EVERY_SECOND:
+            //     detectedSensors.PrintListSensor();
+            //     break;            
         }
     }
     return result;
