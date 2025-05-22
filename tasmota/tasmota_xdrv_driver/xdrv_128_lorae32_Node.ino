@@ -12,11 +12,8 @@
 \*********************************************************************************************/
 
 #warning **** LoRa E32 Driver is included... ****
-#ifndef ESP32
-#define ESP32
-#endif
 #define XDRV_128 128 // Định danh driver trong hệ thống Tasmota
-#include "MYLORA_E32.h"
+#include "LoRa_E32.h"
 #include <Arduino.h>
 #include "ArduinoJson.h" 
 /****************************************************************************************** */
@@ -37,147 +34,63 @@ bool AddLoginitSuccess1 = false;
     Send_Attribute  - Send attribute of Lora Device
     Help       - Prints a list of available commands
 */
-const char MyProjectCommands[] PROGMEM = "|" // No Prefix
-                                         "Say_Hello|"
-                                         "Help|"
-                                         "SendLora|"
-                                         "SendLoraTelemetry|"
-                                         "SendLoraAttribute|"
-                                         "SetNameLora|"
-                                         "BeginLora|"
-                                         "PrintLora";
-void (*const MyProjectCommand[])(void) PROGMEM = {
-    &CmdSay_Hello, &CmdHelp,&CmdSendLora,
-    &CmdSendLoraTelemetry, &CmdSendLoraAttribute,&CmdSetNameLora,&CmdBeginLora,&CmdPrintLora
+
+struct LoraSerial_t
+{
+    bool active = false;
+    byte tx = 0;
+    byte rx = 0;
+    LoRa_E32 *LoraSerial = nullptr;
+}LoraSerial;
+
+HardwareSerial *mySerial = nullptr;
+class Device_info
+{
+public:
+    String device_name;
+    uint8_t channel;  // kênh truyền
+    uint8_t addrHigh; // Địa chỉ cao
+    uint8_t addrLow;  // Địa chỉ thấp
+    float longitude;  // Kinh độ
+    float latitude;   // Vĩ độ
+    uint8_t target_addrHigh;
+    uint8_t target_addrLow;
+    Device_info()
+    {
+        this->device_name = "";
+    }
+    Device_info(String device_name)
+    {
+        this->device_name = device_name;
+    }
+    Device_info( uint8_t addr_high,uint8_t addr_low)
+    {
+        this->addrHigh = addr_high;
+        this->addrLow = addr_low;
+    }
+    Device_info(String device_name, uint8_t addr_high,uint8_t addr_low,
+        uint8_t channel, float longitude, float latitude, uint8_t target_addr_high,uint8_t target_addr_low)
+    {
+        this->device_name = device_name;
+        this->addrHigh = addr_high;
+        this->addrLow = addr_low;
+        this->channel = channel;
+        this->longitude = longitude;
+        this->latitude = latitude;
+        this->target_addrHigh = target_addr_high;
+        this->target_addrLow = target_addr_low;
+    }
+    void setLoraName(String device_name)
+    {
+        this->device_name = device_name;
+    }
 };
-void CmdHelp(void)
-{
-    AddLog(LOG_LEVEL_INFO, PSTR("Help: Accepted commands "));
-    AddLog(LOG_LEVEL_INFO, PSTR("Say_Hello : Print Hello"));
-    AddLog(LOG_LEVEL_INFO, PSTR("SendLoraAttribute : Transmit attributes of your lora to other lora"));
-    ResponseCmndDone();
-}
-void CmdSay_Hello(void)
-{
-    AddLog(LOG_LEVEL_INFO, PSTR("Say_Hello: Hello!"));
-    ResponseCmndDone();
-}
-void CmdSendLora(void){
-  if (XdrvMailbox.data_len == 0)
-  {
-      AddLog(LOG_LEVEL_INFO, PSTR("No data to transmit"));
-      ResponseCmndDone();
-      return;
-  }
-  else
-  {
-    char* data = XdrvMailbox.data;
-    int len = XdrvMailbox.data_len;
-    AddLog(LOG_LEVEL_INFO, PSTR("Lora Transmit : %s"), data);
-    ResponseStatus rs = my_lora_e32->sendMessage(data, len);
-    AddLog(LOG_LEVEL_INFO, rs.getResponseDescription().c_str());
-    ResponseCmndDone();
-  }
-}
-
-void CmdSetNameLora(void){
-  if(XdrvMailbox.data_len == 0){
-    AddLog(LOG_LEVEL_INFO, PSTR("Can not set name, no data name"));
-    ResponseCmndDone();
-    return;
-  }
-  else{
-    AddLog(LOG_LEVEL_INFO, PSTR("Set Name Device: "));
-    AddLog(LOG_LEVEL_INFO, XdrvMailbox.data);
-    device_info.device_name = String(XdrvMailbox.data);
-    ResponseCmndDone();
-  }
-}
-
-void CmdBeginLora(void){
-  StaticJsonDocument<256> doc;
-  DeserializationError error = deserializeJson(doc, XdrvMailbox.data);
-  if(error){
-    AddLog(LOG_LEVEL_INFO, "JSON parse error");
-    ResponseCmndDone();
-  }
-  else{
-    if(doc.containsKey("channel") && doc.containsKey("addrHigh") && doc.containsKey("addrLow")){
-      uint8_t Baudrate = 3;
-      uint8_t fixedTransmission = 0;
-      uint8_t channel = doc["channel"].as<uint8_t>();
-      uint8_t addrHigh = doc["addrHigh"].as<uint8_t>();
-      uint8_t addrLow = doc["addrLow"].as<uint8_t>();
-      if(doc.containsKey("Baudrate")){
-        Baudrate = doc["Baudrate"];
-      }
-      if(doc.containsKey("fixedTransmission")){
-        fixedTransmission = doc["fixedTransmission"];
-      }
-      configMyLoraE32(channel, addrHigh, addrLow, Baudrate, fixedTransmission);
-    }
-    ResponseCmndDone();
-  }
-}
-
-void CmdSendLoraTelemetry(void)
-{
-    if (XdrvMailbox.data_len == 0)
-    {
-        AddLog(LOG_LEVEL_INFO, PSTR("No data to transmit"));
-        ResponseCmndDone();
-        return;
-    }   
-    StaticJsonDocument<256> doc;
-    JsonArray arr = doc.createNestedArray(String(device_info.device_name));
-    JsonObject data = arr.createNestedObject();
-
-    StaticJsonDocument<128> mailboxDoc;
-    DeserializationError error = deserializeJson(mailboxDoc, XdrvMailbox.data);
-    if (error) {
-        AddLog(LOG_LEVEL_ERROR, PSTR("JSON parse error"));
-        ResponseCmndDone();
-        return;
-    }
-    for (JsonPair p : mailboxDoc.as<JsonObject>()) {
-      data[p.key()] = p.value();
-    }
-    String json_string;
-    serializeJson(doc, json_string);
-    int len = json_string.length();
-    ResponseStatus rs = my_lora_e32->sendMessage(json_string.c_str(), len);
-    AddLog(LOG_LEVEL_INFO, PSTR("LoRa Send: %s, with len is %d"), rs.getResponseDescription().c_str(), len);
-    ResponseCmndDone();
-}
-
-void CmdSendLoraAttribute(void){
-    StaticJsonDocument<58> doc;
-    JsonObject deviceA = doc.createNestedObject(device_info.device_name);
-
-    deviceA["addrHigh"] = device_info.addrHigh;
-    deviceA["addrLow"] = device_info.addrLow;
-    deviceA["longitude"] = device_info.longitude;
-    deviceA["latitude"] = device_info.latitude;
-    String json_string;
-    serializeJson(doc, json_string);
-    AddLog(LOG_LEVEL_INFO, PSTR("Mess from ESP32S3: %s"), json_string.c_str());
-    ResponseStatus rs = my_lora_e32->sendMessage(json_string.c_str(), json_string.length());
-    AddLog(LOG_LEVEL_INFO, rs.getResponseDescription().c_str());
-    ResponseCmndDone();
-}
-
-void CmdSendData(void)
-{
-    if (XdrvMailbox.data_len == 0)
-    {
-        AddLog(LOG_LEVEL_INFO, PSTR("SendData: No data provided!"));
-        ResponseCmndDone();
-        return;
-    }
-
-    AddLog(LOG_LEVEL_INFO, PSTR("Receive from console: %s"), XdrvMailbox.data);
-    ResponseCmndDone();
-}
+/* ********************************Biến toàn cục***********************************/
+StaticJsonDocument<256> Lora_mapping;
+JsonObject Lora_mapping_ojb = Lora_mapping.to<JsonObject>();
+/************************************************************************************* */
+Device_info device_info("Device A",0x12,0x34,23, 106.76940000, 10.90682000,0x12,0x34);
+/*************************************In cấu hình LORA ******************************* */
 /*************************************** LOG DETAIL LORA ****************************************************** */
 void printParameters(struct Configuration configuration)
 {
@@ -218,212 +131,376 @@ void printModuleInformation(struct ModuleInformation moduleInformation)
 
   AddLog(LOG_LEVEL_INFO, PSTR("----------------------------------------"));
 }
-void CmdPrintLora(void){
-  ResponseStructContainer c = my_lora_e32->getConfiguration();
-  Configuration configuration = *(Configuration *)c.data;
-  printParameters(configuration);
-  ResponseStructContainer cMi;
-  cMi = my_lora_e32->getModuleInformation();
-  ModuleInformation mi = *(ModuleInformation *)cMi.data;
-  printModuleInformation(mi);
-}
-/************************************************************************************************************ */
-// Biến toàn cục
-bool initSuccess = false;
 
-void LoraE32Init()
+
+/********************************************************************************************** */
+void LoraSerialInit(void)
 {
-  // Gọi hàm khởi tạo từ my_lora_e32->h
-  if (!PinUsed(GPIO_LORA_E32_RX) || !PinUsed(GPIO_LORA_E32_TX) ) return;
-  initSuccess = true;
-  String mac_str = TasmotaGlobal.mqtt_client; // 		DVES_18E8AC
-  // mac_str = WiFi.macAddress(); // "AB:CD:EF:GH:JK:LM"
-  int first = mac_str.lastIndexOf("_"); // At _18....
-  String mac_device = mac_str.substring(first+1); //"18E8AC"
-  device_info.setLoraName(mac_device);
-  M0_Pin = -1;
-  M1_Pin = -1;
-  if(!PinUsed(GPIO_LORA_E32_M0) || !PinUsed(GPIO_LORA_E32_M1)){
-    M0_Pin = Pin(GPIO_LORA_E32_M0);
-    M1_Pin = Pin(GPIO_LORA_E32_M1);
-  }
-  if(M0_Pin!=-1&&M1_Pin!=-1){
-    pinMode(M0_Pin,OUTPUT);
-    pinMode(M1_Pin,OUTPUT);
-  }
-  if(PinUsed(GPIO_LORA_E32_AUX)){
-    AUX_Pin =  Pin(GPIO_LORA_E32_AUX);
-  }
-  my_lora_e32 = new LoRa_E32(
-    Pin(GPIO_LORA_E32_TX), 
-    Pin(GPIO_LORA_E32_RX), 
-    &LoraSerial,
-    AUX_Pin,
-    M0_Pin,
-    M1_Pin,
-    UART_BPS_RATE_9600,
-    SERIAL_8N1
-  );
-  my_lora_e32->begin();
-  configMyLoraE32(20, 0x01, 0x02, 3);
-  ResponseStructContainer c = my_lora_e32->getConfiguration();
-  if (c.data == NULL)
-  {
-    AddLog(LOG_LEVEL_INFO, PSTR("Config NULL"));
-    return;
-  }
-  else
-  {
-    Configuration configuration = *(Configuration *)c.data;
-    // printParameters(configuration);
-    ResponseStructContainer cMi;
-    cMi = my_lora_e32->getModuleInformation();
-    ModuleInformation mi = *(ModuleInformation *)cMi.data;
-    // printModuleInformation(mi);
-  }
-  AddLog(LOG_LEVEL_INFO, PSTR("LoRa E32: Initialized successfully"));
+    LoraSerial.active = false;
+    if(PinUsed(GPIO_LORA_E32_TX) && PinUsed(GPIO_LORA_E32_RX))
+    {
+      LoraSerial.rx = Pin(GPIO_LORA_E32_RX);
+      LoraSerial.tx = Pin(GPIO_LORA_E32_TX);
+      LoraSerial.active = true;
+    }
+
+    if(LoraSerial.active)
+    {
+        mySerial = new HardwareSerial(1); // Use UART2
+        // mySerial->begin(9600, SERIAL_8N1, LoraSerial.tx, LoraSerial.rx);
+        String mac_str = TasmotaGlobal.mqtt_client; // 		DVES_18E8AC
+        // mac_str = WiFi.macAddress(); // "AB:CD:EF:GH:JK:LM"
+        int first = mac_str.lastIndexOf("_");             // At _18....
+        String mac_device = mac_str.substring(first + 1); //"18E8AC"
+        device_info.setLoraName(mac_device);
+        //Serial1.begin(9600, SERIAL_8N1, LoraSerial.tx, LoraSerial.rx);
+        LoraSerial.LoraSerial = new LoRa_E32(LoraSerial.tx, LoraSerial.rx, mySerial, UART_BPS_RATE_9600, SERIAL_8N1);
+        ResponseStatus rs;
+        bool check = LoraSerial.LoraSerial->begin();
+        if (check)
+        {
+            //LoraSerial.active = true;
+            ResponseStructContainer c = LoraSerial.LoraSerial->getConfiguration();
+            Configuration configuration = *(Configuration*) c.data;
+            AddLog(LOG_LEVEL_INFO, "%s", c.status.getResponseDescription().c_str());
+
+            // configuration.ADDH = 0x12;
+            // configuration.ADDL = 0x34;
+            configuration.CHAN = 23;
+            configuration.SPED.uartParity = MODE_00_8N1;      // Chỉ có ở lorae32_cfg → gán
+            configuration.SPED.airDataRate = AIR_DATA_RATE_100_96;  // Chỉ có ở lorae32_cfg → gán
+
+            configuration.OPTION.fixedTransmission = 1; // Có ở cả 2 → giữ của configuration
+            configuration.OPTION.ioDriveMode = IO_D_MODE_PUSH_PULLS_PULL_UPS;  // Chỉ có ở lorae32_cfg → gán
+            configuration.OPTION.wirelessWakeupTime = WAKE_UP_750;             // Chỉ có ở lorae32_cfg → gán
+            configuration.OPTION.fec = FEC_1_ON;                                // Chỉ có ở lorae32_cfg → gán
+            configuration.OPTION.transmissionPower = POWER_10;                 // Có ở cả hai → giữ của configuration
+
+            rs = LoraSerial.LoraSerial->setConfiguration(configuration,WRITE_CFG_PWR_DWN_SAVE);
+            AddLog(LOG_LEVEL_INFO, "%s", c.status.getResponseDescription().c_str());
+
+            c = LoraSerial.LoraSerial->getConfiguration();
+            // It's important get configuration pointer before all other operation
+            configuration = *(Configuration*) c.data;
+            AddLog(LOG_LEVEL_INFO, "%s", c.status.getResponseDescription().c_str());
+            if(c.status.code == SUCCESS){
+                printParameters(configuration);
+                device_info.addrHigh = configuration.ADDH;
+                device_info.addrLow = configuration.ADDL;
+            }
+            else{
+                AddLog(LOG_LEVEL_INFO,PSTR("ERROR TO READ CONFIGURATION"));
+            }
+            AddLog(LOG_LEVEL_INFO, "LoraSerial: Init OK");
+        }
+        else
+        {
+            delete mySerial;
+            mySerial = nullptr;
+            delete LoraSerial.LoraSerial;
+            LoraSerial.LoraSerial = nullptr;
+            LoraSerial.active = false;
+            AddLog(LOG_LEVEL_ERROR, PSTR("LoraSerial: Init failed %s"), rs.getResponseDescription().c_str());
+        }
+    }
+
 }
 
-// Xử lý gửi/nhận dữ liệu
-void LoraE32Processing()
+#define D_CMND_SEND_LORA_SERIAL "SendLora"
+#define D_CMND_SEND_LORA_TELEMETRY "SendLoraTelemetry"
+#define D_CMND_SEND_Lora_ATTRIBUTE "SendLoraAttribute"
+#define D_CMND_PRINT_MAPPING_Lora "PrintLoraMapping"
+#define D_CMND_SET_CONF_Lora "SetLoraConf"
+#define D_CMND_PRINT_CONF_Lora "PrintLoraConf"
+#define D_CMND_KEY_CONF_Lora "PrintKeyLoraConf"
+const char kLoraSerialCommands[] PROGMEM = "|"
+    D_CMND_SEND_LORA_SERIAL "|"
+    D_CMND_SEND_LORA_TELEMETRY"|"
+    D_CMND_SEND_Lora_ATTRIBUTE"|"
+    D_CMND_PRINT_MAPPING_Lora "|"
+    D_CMND_PRINT_CONF_Lora "|"
+    D_CMND_SET_CONF_Lora"|"
+    D_CMND_KEY_CONF_Lora;
+
+void (* const LoraSerialCommand[])(void) PROGMEM = {
+    &CmndSendLora,
+    &CmndSendLoraTelemetry,
+    &CmndSendLoraAttribute,
+    &CmndPrintMapLora,
+    &CmndPrintConfLora,
+    &CmndSetConfLora,
+    &CmndPrintKeyLoraConf
+};
+void CmndPrintKeyLoraConf(void) {
+    AddLog(LOG_LEVEL_INFO, PSTR("------ USE THESE KEYS FOR SET CONF ------"));
+
+    AddLog(LOG_LEVEL_INFO, PSTR("ADDH               ---> Address High Byte"));
+    AddLog(LOG_LEVEL_INFO, PSTR("ADDL               ---> Address Low Byte"));
+    AddLog(LOG_LEVEL_INFO, PSTR("TAR_ADDH           ---> Target Address High"));
+    AddLog(LOG_LEVEL_INFO, PSTR("TAR_ADDL           ---> Target Address Low"));
+    AddLog(LOG_LEVEL_INFO, PSTR("NETID              ---> Network ID"));
+    AddLog(LOG_LEVEL_INFO, PSTR("CHAN               ---> Channel (0-83)"));
+
+    AddLog(LOG_LEVEL_INFO, PSTR("uartBaudRate       ---> UART Baud Rate (e.g., 9600, 115200)"));
+    AddLog(LOG_LEVEL_INFO, PSTR("airDataRate        ---> Air Data Rate"));
+    AddLog(LOG_LEVEL_INFO, PSTR("uartParity         ---> UART Parity Mode (e.g., 8N1)"));
+
+    AddLog(LOG_LEVEL_INFO, PSTR("subPacketSetting   ---> Sub-Packet Size Setting"));
+    AddLog(LOG_LEVEL_INFO, PSTR("RSSIAmbientNoise   ---> Enable/Disable RSSI Ambient Noise"));
+    AddLog(LOG_LEVEL_INFO, PSTR("transmissionPower  ---> Transmission Power Level"));
+
+    AddLog(LOG_LEVEL_INFO, PSTR("enableRSSI         ---> Enable RSSI Reporting"));
+    AddLog(LOG_LEVEL_INFO, PSTR("fixedTransmission  ---> Fixed Transmission Mode"));
+    AddLog(LOG_LEVEL_INFO, PSTR("enableRepeater     ---> Enable Repeater Function"));
+    AddLog(LOG_LEVEL_INFO, PSTR("enableLBT          ---> Enable Listen Before Talk"));
+    AddLog(LOG_LEVEL_INFO, PSTR("WORTransceiverControl ---> WOR Mode: Transmitter/Receiver"));
+    AddLog(LOG_LEVEL_INFO, PSTR("WORPeriod          ---> WOR Wake Period"));
+
+    AddLog(LOG_LEVEL_INFO, PSTR("CRYPT_H            ---> Encryption Key High Byte"));
+    AddLog(LOG_LEVEL_INFO, PSTR("CRYPT_L            ---> Encryption Key Low Byte"));
+
+    ResponseCmndDone();
+}
+
+void CmndPrintConfLora(void){
+    ResponseStructContainer c = LoraSerial.LoraSerial->getConfiguration();
+    Configuration configuration = *(Configuration*) c.data;
+    AddLog(LOG_LEVEL_INFO, "%s", c.status.getResponseDescription().c_str());
+
+    if(c.status.code != SUCCESS){
+        AddLog(LOG_LEVEL_INFO,PSTR("ERROR READ CONFIGTION"));
+        ResponseCmndDone();
+        return;
+    }
+    printParameters(configuration);
+    ResponseCmndDone();
+}
+void CmndSetConfLora(void) {
+    if (XdrvMailbox.data_len == 0) {
+        AddLog(LOG_LEVEL_INFO, PSTR("No data for config"));
+        ResponseCmndDone();
+        return;
+    }
+    ResponseStructContainer c;
+	c = LoraSerial.LoraSerial->getConfiguration();
+	// It's important get configuration pointer before all other operation
+	Configuration configuration = *(Configuration*) c.data;
+    StaticJsonDocument<256> mailboxDoc;
+    DeserializationError error = deserializeJson(mailboxDoc, XdrvMailbox.data);
+    if (error) {
+        AddLog(LOG_LEVEL_INFO, PSTR("ERROR TO PARSE JSON"));
+        ResponseCmndDone();
+        return;
+    }
+
+    if (mailboxDoc.containsKey("ADDH")) 
+    {
+        configuration.ADDH = mailboxDoc["ADDH"];
+        device_info.addrHigh =  mailboxDoc["ADDH"];
+    }
+    if (mailboxDoc.containsKey("ADDL")){
+        configuration.ADDL = mailboxDoc["ADDL"];
+        device_info.addrLow = mailboxDoc["ADDL"];
+    }
+    if(mailboxDoc.containsKey("TAR_ADDH")) device_info.target_addrHigh = mailboxDoc["TAR_ADDH"];
+    if(mailboxDoc.containsKey("TAR_ADDL")) device_info.target_addrHigh = mailboxDoc["TAR_ADDL"];
+    if (mailboxDoc.containsKey("CHAN")) configuration.CHAN = mailboxDoc["CHAN"];
+
+    if (mailboxDoc.containsKey("uartBaudRate")) {
+        uint8_t baud = mailboxDoc["uartBaudRate"];
+        if (baud == UART_BPS_1200 || baud == UART_BPS_2400 || baud == UART_BPS_4800 ||
+            baud == UART_BPS_9600 || baud == UART_BPS_19200 || baud == UART_BPS_38400 ||
+            baud == UART_BPS_57600 || baud == UART_BPS_115200) {
+            configuration.SPED.uartBaudRate = baud;
+        }
+    }
+
+    if (mailboxDoc.containsKey("airDataRate")) configuration.SPED.airDataRate = mailboxDoc["airDataRate"];
+    if (mailboxDoc.containsKey("uartParity")) configuration.SPED.uartParity = mailboxDoc["uartParity"];
+    if (mailboxDoc.containsKey("transmissionPower")) configuration.OPTION.transmissionPower = mailboxDoc["transmissionPower"];
+
+    if (mailboxDoc.containsKey("fixedTransmission")) configuration.OPTION.fixedTransmission = mailboxDoc["fixedTransmission"];
+	  ResponseStatus rs = LoraSerial.LoraSerial->setConfiguration(configuration, WRITE_CFG_PWR_DWN_SAVE);
+	AddLog(LOG_LEVEL_INFO, "%s", c.status.getResponseDescription().c_str());
+
+    if(c.status.code== SUCCESS){
+        AddLog(LOG_LEVEL_INFO, PSTR("Lora config updated"));
+    }
+    else{
+        AddLog(LOG_LEVEL_INFO, PSTR("ERROR TO SET CONF LORA"));
+    }
+    ResponseCmndDone();
+}
+void CmndSendLoraTelemetry(void)
 {
-  //
-  //
-  if (!initSuccess)
-    return;
-
-  // Kiểm tra có tin nhắn từ LoRa
-  if (my_lora_e32->available() > 1)
-  {
-    ResponseContainer rc = my_lora_e32->receiveMessage();
-    if (rc.status.code == 1)
+    if (XdrvMailbox.data_len == 0)
     {
-      AddLog(LOG_LEVEL_INFO, PSTR("Receive Mess: "));
-      AddLog(LOG_LEVEL_INFO, rc.data.c_str());
-      processRpcCommand(rc.data.c_str(),rc.data.length());
+        AddLog(LOG_LEVEL_INFO, PSTR("No data to transmit"));
+        ResponseCmndDone();
+        return;
     }
-    else
+
+    StaticJsonDocument<256> doc;
+    JsonArray arr = doc.createNestedArray(String(device_info.device_name));
+    JsonObject data = arr.createNestedObject();
+
+    StaticJsonDocument<128> mailboxDoc;
+    DeserializationError error = deserializeJson(mailboxDoc, XdrvMailbox.data);
+    if (error)
     {
-      AddLog(LOG_LEVEL_INFO, PSTR("ERROR!"));
+        AddLog(LOG_LEVEL_ERROR, PSTR("JSON parse error"));
+        ResponseCmndDone();
+        return;
     }
-  }
+    for (JsonPair p : mailboxDoc.as<JsonObject>())
+    {
+        data[p.key()] = p.value();
+    }
+    String json_string;
+    serializeJson(doc, json_string);
+    int len = json_string.length();
+    ResponseStatus rs = LoraSerial.LoraSerial->sendMessage(json_string.c_str(), len);
+    AddLog(LOG_LEVEL_INFO, PSTR("LoRa Send: %s : %s, with len is %d"), rs.getResponseDescription().c_str(),json_string, len);
+    ResponseCmndDone();
 }
 
-void LORA_E32_COLLECT_DATA() {
-  ResponseClear();
-  XsnsCall(FUNC_JSON_APPEND);
-  const char* raw = ResponseData();
-  //  Bắt lỗi dấu phẩy ở đầu
-  String fixed = raw;
-  if (fixed.startsWith(",")) {
-      fixed = fixed.substring(1);  // Bỏ dấu phẩy đầu
-  }
-  fixed = "{" + fixed + "}";       // Bọc thành JSON hoàn chỉnh
+void CmndPrintMapLora(void)
+{
+    AddLog(LOG_LEVEL_INFO, PSTR("===== Lora MAPPING ====="));
 
-  AddLog(LOG_LEVEL_INFO, PSTR("Sensor JSON fixed: %s"), fixed.c_str());
-
-  // Parse JSON
-  StaticJsonDocument<512> input_doc;
-  DeserializationError err = deserializeJson(input_doc, fixed);
-  if (err) {
-      AddLog(LOG_LEVEL_ERROR, PSTR("Sensor JSON parse error: %s"), err.c_str());
-      return;
-  }
-
-  // Gói lại JSON kiểu {"Device":[{...}]}
-  StaticJsonDocument<512> out_doc;
-  JsonArray arr = out_doc.createNestedArray(String(device_info.device_name));
-  JsonObject data = arr.createNestedObject();
-
-  for (JsonPair p : input_doc.as<JsonObject>()) {
-      data[p.key()] = p.value();
-  }
-  String final_payload;
-  serializeJson(out_doc, final_payload);
-  ResponseStatus rs = my_lora_e32->sendMessage(final_payload.c_str(), final_payload.length());
-  AddLog(LOG_LEVEL_INFO, PSTR("LoRa Send: %s | Payload: %s"), rs.getResponseDescription().c_str(), final_payload.c_str());
+    for (JsonPair p : Lora_mapping_ojb)
+    {
+        const char *key = p.key().c_str();                // "V1", "V2", ...
+        const char *value = p.value().as<const char *>(); // "DHT11-Temperature", ...
+        AddLog(LOG_LEVEL_INFO, PSTR("%s => %s"), key, value);
+    }
+    AddLog(LOG_LEVEL_INFO, PSTR("========================="));
+}
+void CmndSendLoraAttribute(void)
+{
+    StaticJsonDocument<256> doc;
+    JsonObject deviceA = doc.createNestedObject(device_info.device_name);
+    deviceA["addrHigh"] = device_info.addrHigh;
+    deviceA["addrLow"] = device_info.addrLow;
+    deviceA["channel"] = device_info.channel;
+    deviceA["longitude"] = device_info.longitude;
+    deviceA["latitude"] = device_info.latitude;
+    String json_string;
+    serializeJson(doc, json_string);
+    AddLog(LOG_LEVEL_INFO, PSTR("Lora Send: %s"), json_string.c_str());
+    ResponseStatus rs = LoraSerial.LoraSerial->sendFixedMessage(device_info.target_addrHigh,device_info.target_addrLow,device_info.channel,json_string);
+    AddLog(LOG_LEVEL_INFO, rs.getResponseDescription().c_str());
+    ResponseCmndDone();
+}
+void CmndSendLora(void)
+{
+    if (XdrvMailbox.data_len == 0)
+    {
+        AddLog(LOG_LEVEL_INFO, PSTR("Nothing to transmit"));
+        ResponseCmndDone();
+        return;
+    }
+    char *tran = XdrvMailbox.data;
+    AddLog(LOG_LEVEL_INFO, PSTR("Transmit data: %s"), tran);
+    ResponseStatus rs = LoraSerial.LoraSerial->sendMessage(tran);
+    AddLog(LOG_LEVEL_INFO, rs.getResponseDescription().c_str());
+    ResponseCmndDone();
 }
 
-void processRpcCommand(const char* jsonMessage,int len){
-  StaticJsonDocument<256> doc; // Bộ nhớ cho json
-  deserializeJson(doc,jsonMessage);
-  if(!doc.is<JsonObject>()){
-      // AddLog(LOG_LEVEL_INFO,PSTR("JSON Parsing Failed"));
-      return;
-  }
-  if(!doc.containsKey("data")){
-    return;
-  }
-  // Trích xuất dữ liệu từ json
-  String device = doc["device"];
-  AddLog(LOG_LEVEL_INFO,PSTR("Revice for Deivce:"));
-  AddLog(LOG_LEVEL_INFO,device.c_str());
-  // uint8_t AddrHigh = doc["AddrHigh"];
-  // uint8_t AddrLow = doc["AddrLow"];
-  int request_id = doc["data"]["id"];
-  const char* method = doc["data"]["method"];
-  int params = doc["data"]["params"];
-  if(strcmp(device.c_str(),device_info.device_name.c_str()) != 0){
-      AddLog(LOG_LEVEL_INFO,PSTR("RPC is not for us, device_name is differnt"));
-      return;
-  } 
-  // else if(AddrHigh != device_info.addrHigh){
-  //     AddLog(LOG_LEVEL_INFO,PSTR("RPC is not for us, AddrHigh is differnt"));
-  //     return;       
-  // }
-  // else if(AddrLow != device_info.addrLow){
-  //     AddLog(LOG_LEVEL_INFO,PSTR("RPC is not for us, AddrLow is differnt"));
-  //     return;             
-  // }
-  // Thực hiện RPC
-  AddLog(LOG_LEVEL_INFO,PSTR("RPC ID: %d"),request_id);
-  if(strcmp(method,"POWER1") == 0){
-      AddLog(LOG_LEVEL_INFO,PSTR("Set Led to %d"),params);
-      AddLog(LOG_LEVEL_INFO,PSTR("Set Led to %d"),params);
-      char fullCommand[64];
-      snprintf(fullCommand, sizeof(fullCommand), "%s %s", method, params);
-      ExecuteCommand(fullCommand,SRC_SERIAL);
-      my_lora_e32->sendMessage(jsonMessage,len);
-  }
-  // else if(){
-  /* More RPC in here*/
-  // }
+void LoraSerial_COLLECT_DATA()
+{
+
+    ResponseClear();
+    XsnsCall(FUNC_JSON_APPEND);
+    const char *raw = ResponseData();
+    //  Bắt lỗi dấu phẩy ở đầu
+    String fixed = raw;
+    if (fixed.startsWith(","))
+    {
+        fixed = fixed.substring(1); // Bỏ dấu phẩy đầu
+    }
+    if(fixed == ""){
+        AddLog(LOG_LEVEL_INFO,PSTR("No data to tran"));
+        return;
+    }
+    fixed = "{" + fixed + "}"; // Bọc thành JSON hoàn chỉnh
+    int ran = random(0,2000);
+    delay(ran);
+    AddLog(LOG_LEVEL_INFO, PSTR("Sensor JSON fixed: %s"), fixed.c_str());
+
+    // Parse JSON
+    StaticJsonDocument<256> input_doc;
+    DeserializationError err = deserializeJson(input_doc, fixed);
+    if (err)
+    {
+        AddLog(LOG_LEVEL_ERROR, PSTR("Sensor JSON parse error: %s"), err.c_str());
+        return;
+    }
+
+    // Gói lại JSON kiểu {"Device":[{...}]}
+    StaticJsonDocument<512> out_doc;
+    JsonArray arr = out_doc.createNestedArray(String(device_info.device_name));
+    JsonObject data = arr.createNestedObject();
+    int v_count = 1; // Đếm số biến V
+    for (JsonPair p : input_doc.as<JsonObject>())
+    {
+        const char *sensorName = p.key().c_str(); // "DHT11"
+        JsonObject inner = p.value().as<JsonObject>();
+        for (JsonPair q : inner)
+        {
+            String sensor_sub = String(sensorName) + "-" + q.key().c_str();
+            // Tạo key dạng V1, V2, ...
+            String v_key = "V" + String(v_count);
+            Lora_mapping_ojb[v_key] = sensor_sub;
+            data[v_key] = q.value();
+            v_count++;
+        }
+    }
+    String final_payload;
+    serializeJson(out_doc, final_payload);
+    ResponseStatus rs = LoraSerial.LoraSerial->sendFixedMessage(device_info.addrHigh,device_info.addrLow,device_info.channel,final_payload);
+    AddLog(LOG_LEVEL_INFO, rs.getResponseDescription().c_str());
+    AddLog(LOG_LEVEL_INFO, "Lora Send: %s",final_payload.c_str());
 }
-// Interface cho Tasmota
+
+void LoraSerialProcessing()
+{
+    if(!LoraSerial.active) return;
+
+    if(LoraSerial.LoraSerial -> available() > 1)
+    {
+        ResponseContainer rc = LoraSerial.LoraSerial -> receiveMessage();
+        if(rc.status.code == 1)
+        {
+            AddLog(LOG_LEVEL_INFO, PSTR("Receive Mess: "));
+            AddLog(LOG_LEVEL_INFO, rc.data.c_str());
+        }
+    }
+}
 bool Xdrv128(uint32_t function)
 {
-
-  bool result = false;
-
-  if (FUNC_INIT == function)
-  {
-    // AddLog(LOG_LEVEL_INFO, PSTR("INIT"));
-    LoraE32Init();
-  }
-  else if (initSuccess)
-  {
-
-    switch (function)
+    bool result = false;
+    if(FUNC_PRE_INIT == function)
     {
-      //    Select suitable interval for polling your function
-    // case FUNC_EVERY_SECOND:
-    //   AddLog(LOG_LEVEL_INFO, PSTR("EVERY SECOND"));
-    //   break;
-    case FUNC_EVERY_250_MSECOND:
-      LoraE32Processing();
-      break;
-    case FUNC_COMMAND:
-      AddLog(LOG_LEVEL_DEBUG_MORE, PSTR("Calling My Project Command..."));
-      result = DecodeCommand(MyProjectCommands, MyProjectCommand);
-      break;
-    case FUNC_AFTER_TELEPERIOD:
-        LORA_E32_COLLECT_DATA();       
-      break;
-      //    case FUNC_EVERY_200_MSECOND:
-      //    case FUNC_EVERY_100_MSECOND:
+        LoraSerialInit();
     }
-  }
-
-  return result;
+    else if(LoraSerial.active)
+    {
+        switch(function)
+        {
+            case FUNC_ACTIVE:
+                result = true;
+                break;
+            case FUNC_EVERY_250_MSECOND:
+                LoraSerialProcessing();
+                break;
+            case FUNC_COMMAND:
+                result = DecodeCommand(kLoraSerialCommands,LoraSerialCommand);
+                break;
+            case FUNC_AFTER_TELEPERIOD:
+                LoraSerial_COLLECT_DATA();
+        }
+    }
+    return result;
 }
-#endif // LORA_E32
+#endif // USE_LORA_UART
