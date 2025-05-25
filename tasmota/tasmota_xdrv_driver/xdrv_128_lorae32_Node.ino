@@ -5,6 +5,10 @@
 #include "my_user_config.h"
 #ifdef USE_LORA_E32
 
+#ifndef ESP32
+#define ESP32
+#endif
+#define NAME_NODE "SI Soil Moisture 1"
 /*********************************************************************************************\
  * LoRa E32 bridge for Tasmota
  * Communicates with LoRa E32 modules over UART
@@ -89,7 +93,7 @@ public:
 StaticJsonDocument<256> Lora_mapping;
 JsonObject Lora_mapping_ojb = Lora_mapping.to<JsonObject>();
 /************************************************************************************* */
-Device_info device_info("Device A",0x12,0x34,23, 106.76940000, 10.90682000,0x12,0x34);
+Device_info device_info("SI Water Meter 1",0x12,0x34,23, 106.76940000, 10.90682000,0x01,0x02);
 /*************************************In cấu hình LORA ******************************* */
 /*************************************** LOG DETAIL LORA ****************************************************** */
 void printParameters(struct Configuration configuration)
@@ -152,7 +156,8 @@ void LoraSerialInit(void)
         // mac_str = WiFi.macAddress(); // "AB:CD:EF:GH:JK:LM"
         int first = mac_str.lastIndexOf("_");             // At _18....
         String mac_device = mac_str.substring(first + 1); //"18E8AC"
-        device_info.setLoraName(mac_device);
+        // device_info.setLoraName(mac_device);
+        device_info.setLoraName(NAME_NODE);
         //Serial1.begin(9600, SERIAL_8N1, LoraSerial.tx, LoraSerial.rx);
         LoraSerial.LoraSerial = new LoRa_E32(LoraSerial.tx, LoraSerial.rx, mySerial, UART_BPS_RATE_9600, SERIAL_8N1);
         ResponseStatus rs;
@@ -166,19 +171,18 @@ void LoraSerialInit(void)
 
             // configuration.ADDH = 0x12;
             // configuration.ADDL = 0x34;
-            configuration.CHAN = 23;
-            configuration.SPED.uartParity = MODE_00_8N1;      // Chỉ có ở lorae32_cfg → gán
-            configuration.SPED.airDataRate = AIR_DATA_RATE_100_96;  // Chỉ có ở lorae32_cfg → gán
+            // configuration.CHAN = 20;
+            // configuration.SPED.uartParity = MODE_00_8N1;     
+            // configuration.SPED.airDataRate = AIR_DATA_RATE_010_24;  
+            // configuration.SPED.uartBaudRate = 3;
+            // configuration.OPTION.fixedTransmission = 1;
+            // configuration.OPTION.ioDriveMode = IO_D_MODE_PUSH_PULLS_PULL_UPS;  
+            // configuration.OPTION.wirelessWakeupTime = WAKE_UP_750;             
+            // configuration.OPTION.fec = FEC_1_ON;                                
+            // configuration.OPTION.transmissionPower = POWER_20;                 
 
-            configuration.OPTION.fixedTransmission = 1; // Có ở cả 2 → giữ của configuration
-            configuration.OPTION.ioDriveMode = IO_D_MODE_PUSH_PULLS_PULL_UPS;  // Chỉ có ở lorae32_cfg → gán
-            configuration.OPTION.wirelessWakeupTime = WAKE_UP_750;             // Chỉ có ở lorae32_cfg → gán
-            configuration.OPTION.fec = FEC_1_ON;                                // Chỉ có ở lorae32_cfg → gán
-            configuration.OPTION.transmissionPower = POWER_10;                 // Có ở cả hai → giữ của configuration
-
-            rs = LoraSerial.LoraSerial->setConfiguration(configuration,WRITE_CFG_PWR_DWN_SAVE);
+            // rs = LoraSerial.LoraSerial->setConfiguration(configuration,WRITE_CFG_PWR_DWN_SAVE);
             AddLog(LOG_LEVEL_INFO, "%s", c.status.getResponseDescription().c_str());
-
             c = LoraSerial.LoraSerial->getConfiguration();
             // It's important get configuration pointer before all other operation
             configuration = *(Configuration*) c.data;
@@ -191,6 +195,7 @@ void LoraSerialInit(void)
             else{
                 AddLog(LOG_LEVEL_INFO,PSTR("ERROR TO READ CONFIGURATION"));
             }
+            c.close();
             AddLog(LOG_LEVEL_INFO, "LoraSerial: Init OK");
         }
         else
@@ -329,6 +334,7 @@ void CmndSetConfLora(void) {
     else{
         AddLog(LOG_LEVEL_INFO, PSTR("ERROR TO SET CONF LORA"));
     }
+    c.close();
     ResponseCmndDone();
 }
 void CmndSendLoraTelemetry(void)
@@ -341,7 +347,7 @@ void CmndSendLoraTelemetry(void)
     }
 
     StaticJsonDocument<256> doc;
-    JsonArray arr = doc.createNestedArray(String(device_info.device_name));
+    JsonArray arr = doc.createNestedArray(device_info.device_name);
     JsonObject data = arr.createNestedObject();
 
     StaticJsonDocument<128> mailboxDoc;
@@ -356,10 +362,11 @@ void CmndSendLoraTelemetry(void)
     {
         data[p.key()] = p.value();
     }
-    String json_string;
+    String json_string = "";
     serializeJson(doc, json_string);
     int len = json_string.length();
-    ResponseStatus rs = LoraSerial.LoraSerial->sendMessage(json_string.c_str(), len);
+    // ResponseStatus rs = LoraSerial.LoraSerial->sendFixedMessage(device_info.target_addrHigh,device_info.target_addrLow,device_info.channel,json_string);
+    ResponseStatus rs = LoraSerial.LoraSerial->sendMessage(json_string);
     AddLog(LOG_LEVEL_INFO, PSTR("LoRa Send: %s : %s, with len is %d"), rs.getResponseDescription().c_str(),json_string, len);
     ResponseCmndDone();
 }
@@ -387,9 +394,11 @@ void CmndSendLoraAttribute(void)
     deviceA["latitude"] = device_info.latitude;
     String json_string;
     serializeJson(doc, json_string);
-    AddLog(LOG_LEVEL_INFO, PSTR("Lora Send: %s"), json_string.c_str());
-    ResponseStatus rs = LoraSerial.LoraSerial->sendFixedMessage(device_info.target_addrHigh,device_info.target_addrLow,device_info.channel,json_string);
-    AddLog(LOG_LEVEL_INFO, rs.getResponseDescription().c_str());
+    int len = json_string.length();
+    ResponseStatus rs = LoraSerial.LoraSerial->sendMessage(json_string);
+    AddLog(LOG_LEVEL_INFO, PSTR("LoRa Send: %s : %s, with len is %d"), rs.getResponseDescription().c_str(),json_string.c_str(), len);
+    // ResponseStatus rs = LoraSerial.LoraSerial->sendFixedMessage(device_info.target_addrHigh,device_info.target_addrLow,device_info.channel,json_string);
+    // AddLog(LOG_LEVEL_INFO, rs.getResponseDescription().c_str());
     ResponseCmndDone();
 }
 void CmndSendLora(void)
@@ -452,15 +461,19 @@ void LoraSerial_COLLECT_DATA()
             // Tạo key dạng V1, V2, ...
             String v_key = "V" + String(v_count);
             Lora_mapping_ojb[v_key] = sensor_sub;
-            data[v_key] = q.value();
+            // data[v_key] = q.value();
+            data[q.key().c_str()] = q.value();
             v_count++;
         }
     }
-    String final_payload;
+    
+    String final_payload = "";
     serializeJson(out_doc, final_payload);
-    ResponseStatus rs = LoraSerial.LoraSerial->sendFixedMessage(device_info.addrHigh,device_info.addrLow,device_info.channel,final_payload);
-    AddLog(LOG_LEVEL_INFO, rs.getResponseDescription().c_str());
-    AddLog(LOG_LEVEL_INFO, "Lora Send: %s",final_payload.c_str());
+    int len = final_payload.length();
+
+    // ResponseStatus rs = LoraSerial.LoraSerial->sendFixedMessage(device_info.addrHigh,device_info.addrLow,device_info.channel,final_payload);
+    ResponseStatus rs = LoraSerial.LoraSerial->sendMessage(final_payload);
+    AddLog(LOG_LEVEL_INFO, PSTR("LoRa Send: %s : %s, with len is %d"), rs.getResponseDescription().c_str(),final_payload.c_str(), len);
 }
 
 void LoraSerialProcessing()
@@ -472,8 +485,42 @@ void LoraSerialProcessing()
         ResponseContainer rc = LoraSerial.LoraSerial -> receiveMessage();
         if(rc.status.code == 1)
         {
+            String receive_data = rc.data;
             AddLog(LOG_LEVEL_INFO, PSTR("Receive Mess: "));
-            AddLog(LOG_LEVEL_INFO, rc.data.c_str());
+            AddLog(LOG_LEVEL_INFO, PSTR(receive_data.c_str()));
+            StaticJsonDocument<256> doc;
+            DeserializationError err = deserializeJson(doc, receive_data);
+            if(!err){
+                if (doc.containsKey("device") && doc.containsKey("data")) {
+                    JsonObject data = doc["data"];
+
+                    if (data.containsKey("id") && data.containsKey("method") && data.containsKey("params")) {
+
+                        String device = doc["device"].as<String>();
+                        if (device != device_info.device_name) {
+                            AddLog(LOG_LEVEL_INFO, PSTR("RPC is not for us"));
+                            return;
+                        }
+                        int id = data["id"];
+                        String method = data["method"].as<String>();
+                        String param = data["params"].as<String>();
+                        AddLog(LOG_LEVEL_INFO, PSTR("Method: %s | Value: %s"), method.c_str(), param.c_str());
+
+                        char command[64];
+                        snprintf(command, sizeof(command), "%s %s", method.c_str(), param.c_str());
+                        ExecuteCommand(command, SRC_SERIAL);
+
+                    } else {
+                        AddLog(LOG_LEVEL_INFO, PSTR("Invalid RPC: missing id, method, or params"));
+                    }
+                } else {
+                    AddLog(LOG_LEVEL_INFO, PSTR("Invalid RPC: missing device or data"));
+                }
+            }
+            else{
+                AddLog(LOG_LEVEL_ERROR,PSTR("Error parse Json"));
+                return;
+            }
         }
     }
 }
