@@ -47,10 +47,13 @@ void DetectedSensors::PrintListSensor() {
 
 /*************************************************************************************** */
 void Rs485Init(void){
-    UART uart(6,7,4800,SERIAL_8N1);
+    if(!PinUsed(GPIO_RS485_TX) || !PinUsed(GPIO_RS485_RX)){
+        return;
+    }
+    UART uart(Pin(GPIO_RS485_TX),Pin(GPIO_RS485_RX),9600,SERIAL_8N1);
     rs485.begin(&uart);
     if(rs485.IsBegin()){
-        AddLog(LOG_LEVEL_INFO, PSTR("RS485: RS485 using GPIO%d(RX) and GPIO%d(TX)"),6, 7);
+        AddLog(LOG_LEVEL_INFO, PSTR("RS485: RS485 using GPIO%d(RX) and GPIO%d(TX)"),Pin(GPIO_RS485_TX), Pin(GPIO_RS485_RX));
     }
     else{
         AddLog(LOG_LEVEL_ERROR, PSTR("RS485 BEGIN FAILED"));

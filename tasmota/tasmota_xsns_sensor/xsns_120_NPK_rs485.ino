@@ -64,6 +64,9 @@ class RS485_NPK : public RS485_t{
             this->listKey = {"N","P","K"};
         }
         bool init() override{
+            if(!rs485.IsBegin()){
+                return false;
+            }
             detectedSensors.DetectSensor(this->startAddress,this->endAddress,REG_ADDR_DEVICE_ADDRESS);
             std::vector<uint16_t> listDetected = detectedSensors.GetSensorList();
             this->isDetected = false;
@@ -73,11 +76,11 @@ class RS485_NPK : public RS485_t{
             }
         #endif
             for(uint16_t it : listDetected){
-                AddLog(LOG_LEVEL_INFO,PSTR("[DEBUG] it : %04X"), it);
+                AddLog(LOG_LEVEL_INFO,PSTR("it : %04X"), it);
                 if(it >= this->startAddress && it <= this->endAddress){
                     this->address = it;
                     this->isDetected = true;
-                    AddLog(LOG_LEVEL_INFO,PSTR("[DEBUG] NPK Sensor is detected"));
+                    AddLog(LOG_LEVEL_INFO,PSTR("NPK Sensor is detected"));
                     break;
                 }
             }
@@ -94,7 +97,7 @@ class RS485_NPK : public RS485_t{
                 return;
             }
             else{
-                delay(200);
+                delay(20);
                 uint8_t respone[12]; // Nitro : 16 bit , Kali : 16 bit , PhotPho 16 bit
                 err = rs485.ReceiveRespone(respone,11);
                 if(err){
@@ -150,6 +153,7 @@ void NPKInit(void){
 void NPKreadPayload(void){
     bool success = false;
     rs485NPK.readPayload(&success);
+#ifdef USE_DEBUG
     if(success){
         AddLog(LOG_LEVEL_INFO, PSTR("[DEBUG] ReadNPK sucess"));
     }
@@ -157,31 +161,33 @@ void NPKreadPayload(void){
         rs485NPK.setFalsePayload();
         AddLog(LOG_LEVEL_ERROR,PSTR("[DEBUG] ReadNPK Failed"));
     }
+#endif
 }
 /************************ SHOW ******************** */
-const char HTTP_SNS_SM_NITRO[]        PROGMEM = "{s} Nitrogen {m} %d mg/kg";
-const char HTTP_SNS_SM_PHOSPHORUS[]  PROGMEM = "{s} Phosphorus {m} %d mg/kg";
-const char HTTP_SNS_SM_POTASSIUM[]   PROGMEM = "{s} Kali {m} %d mg/kg";
-#define D_JSON_SOIL_NITROGEN     "Nitrogen"
-#define D_JSON_SOIL_PHOSPHORUS   "Phosphorus"
-#define D_JSON_SOIL_POTASSIUM    "Kali"
+const char D_JSON_SOIL_NITROGEN[]   =   "Nitrogen";
+const char D_JSON_SOIL_PHOSPHORUS[] =   "Phosphorus";
+const char D_JSON_SOIL_POTASSIUM[]  =   "Kali";
+const char HTTP_SNS_SM_NITRO[]       PROGMEM = "{s} %s {m} %d mg/kg";
+const char HTTP_SNS_SM_PHOSPHORUS[]  PROGMEM = "{s} %s {m} %d mg/kg";
+const char HTTP_SNS_SM_POTASSIUM[]   PROGMEM = "{s} %s {m} %d mg/kg";
+
 void NPKShow(bool json){
     bool sucess = false;
     int16_t* payload = rs485NPK.getPayload();
     if (json) {
         ResponseAppend_P(PSTR(",\"%s\":{"), "NPK_Sensor");  // hoặc dùng biến tên nếu có
-        ResponseAppend_P(PSTR("\"" D_JSON_SOIL_NITROGEN "\":%d,"), payload[0]);
-        ResponseAppend_P(PSTR("\"" D_JSON_SOIL_PHOSPHORUS "\":%d,"), payload[1]);
-        ResponseAppend_P(PSTR("\"" D_JSON_SOIL_POTASSIUM "\":%d"), payload[2]);
+        ResponseAppend_P(PSTR("\"" "nitro" "\":%d,"), payload[0]);
+        ResponseAppend_P(PSTR("\"" "photpho" "\":%d,"), payload[1]);
+        ResponseAppend_P(PSTR("\"" "kali" "\":%d"), payload[2]);
         ResponseJsonEnd();
         
     }
 #ifdef USE_WEBSERVER
     else
     {
-        WSContentSend_PD(HTTP_SNS_SM_NITRO, payload[0]);
-        WSContentSend_PD(HTTP_SNS_SM_PHOSPHORUS, payload[1]);
-        WSContentSend_PD(HTTP_SNS_SM_POTASSIUM, payload[2]);
+        WSContentSend_PD(HTTP_SNS_SM_NITRO, D_JSON_SOIL_NITROGEN,payload[0]);
+        WSContentSend_PD(HTTP_SNS_SM_PHOSPHORUS, D_JSON_SOIL_PHOSPHORUS,payload[1]);
+        WSContentSend_PD(HTTP_SNS_SM_POTASSIUM, D_JSON_SOIL_POTASSIUM,payload[2]);
     }
 #endif
 }
@@ -192,6 +198,7 @@ bool Xsns120(uint32_t function)
     bool result = false;
     if (FUNC_INIT == function)
     {
+        delay(20);
         NPKInit();
     }
     else if (isInit)

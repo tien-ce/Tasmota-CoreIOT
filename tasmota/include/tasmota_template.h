@@ -231,6 +231,7 @@
   GPIO_TWAI_TX, GPIO_TWAI_RX, GPIO_TWAI_BO, GPIO_TWAI_CLK,  // ESP32 TWAI serial interface
   GPIO_C8_CO2_5K_TX, GPIO_C8_CO2_5K_RX, // C8-CO2-5K CO2 Sensor
   GPIO_LORA_E32_TX, GPIO_LORA_E32_RX,GPIO_LORA_E32_M0,GPIO_LORA_E32_M1,GPIO_LORA_E32_AUX,   // LoRa E32 serial interface
+  GPIO_RS485_TX,GPIO_RS485_RX,          // RS485 Serial interface (xdrv 123)
   GPIO_SENSOR_END };
 
 // Error as warning to rethink GPIO usage with max 2045
@@ -508,7 +509,8 @@ const char kSensorNames[] PROGMEM =
   D_SENSOR_TM1640_CLK "|" D_SENSOR_TM1640_DIN "|"
   D_SENSOR_TWAI_TX "|" D_SENSOR_TWAI_RX "|" D_SENSOR_TWAI_BO "|" D_SENSOR_TWAI_CLK "|"
   D_SENSOR_C8_CO2_5K_TX "|" D_SENSOR_C8_CO2_5K_RX "|"
-  D_GPIO_LORA_E32_TX "|" D_GPIO_LORA_E32_RX "|" D_GPIO_LORA_E32_M0 "|" D_GPIO_LORA_E32_M1 "|" D_GPIO_LORA_E32_AUX
+  D_GPIO_LORA_E32_TX "|" D_GPIO_LORA_E32_RX "|" D_GPIO_LORA_E32_M0 "|" D_GPIO_LORA_E32_M1 "|" D_GPIO_LORA_E32_AUX "|"
+  D_GPIO_RS485_TX "|" D_GPIO_RS485_RX
   ;
 
 const char kSensorNamesFixed[] PROGMEM =
@@ -1169,6 +1171,10 @@ const uint16_t kGpioNiceList[] PROGMEM = {
   AGPIO(GPIO_LORA_E32_AUX),
 #endif
 
+#ifdef USE_RS485
+  AGPIO(GPIO_RS485_TX),
+  AGPIO(GPIO_RS485_RX),
+#endif
 /*-------------------------------------------------------------------------------------------*\
  * Other sensors
 \*-------------------------------------------------------------------------------------------*/

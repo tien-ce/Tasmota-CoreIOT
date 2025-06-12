@@ -57,7 +57,7 @@ class RS485_Driver {
 private:
     TasmotaModbus* rs485ModBus;
     UART* uart;
-    bool active;
+    bool active = false;
 
 public:
     RS485_Driver();
