@@ -1028,6 +1028,8 @@
 #define D_GPIO_LORA_E32_M0     "LoRa E32 M0"
 #define D_GPIO_LORA_E32_M1     "LoRa E32 M1"
 #define D_GPIO_LORA_E32_AUX    "Lora E32 AUX"
+#define  D_GPIO_RS485_TX       "RS485 Tx"
+#define  D_GPIO_RS485_RX       "RS485 Rx"
 // Units
 #define D_UNIT_AMPERE "A"
 #define D_UNIT_CELSIUS "C"
